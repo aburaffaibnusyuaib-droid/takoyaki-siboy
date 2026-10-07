@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   DollarSign, ShoppingBag, Clock, TrendingUp, ArrowUpRight,
-  Settings2, X, Plus, Trash2, RefreshCw, Activity, Calendar, RotateCcw
+  Settings2, X, Plus, Trash2, RefreshCw, Calendar, RotateCcw,
+  AlertTriangle
 } from 'lucide-react';
 
 import AdminSidebar from '@/components/AdminSidebar';
@@ -28,16 +29,14 @@ export default function AdminDashboard() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
 
-  // SAKELAR MODE
-  const [isDemoMode, setIsDemoMode] = useState(false);
-  
   // STATE UI
   const [activeHour, setActiveHour] = useState(2);
   const [hoveredHour, setHoveredHour] = useState(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
-  // STATE DATA HARGA, TOPPING & STATISTIK
+  // STATE DATA HARGA, TOPPING & STATISTIK REAL-TIME
   const [prices, setPrices] = useState(INITIAL_PRICES);
   const [toppings, setToppings] = useState(DEFAULT_FALLBACK_TOPPINGS);
   const [newToppingName, setNewToppingName] = useState('');
@@ -62,7 +61,7 @@ export default function AdminDashboard() {
             customerName: o.customerName,
             rawTotal: o.totalPrice || 0,
             total: `Rp ${(o.totalPrice || 0).toLocaleString('id-ID')}`,
-            status: o.status,
+            status: (o.status || '').toLowerCase(),
             items: (o.items || []).map(it => ({
               name: it.menuName,
               quantity: it.quantity,
@@ -73,8 +72,9 @@ export default function AdminDashboard() {
         });
         setRawHistory(mapped);
 
+        // Hitung antrean aktif dapur (tidak termasuk ready dan cancelled)
         const activeKitchen = mapped.filter(o => {
-          const s = (o.status || '').toLowerCase();
+          const s = o.status;
           return s === 'pending' || s === 'cooking' || s === 'waiting_verification';
         }).length;
         setKitchenCount(activeKitchen);
@@ -114,28 +114,50 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     setIsMounted(true);
+
+    // Judul Tab Browser Standar Industri POS
+    document.title = 'Dashboard Penjualan | Siboy POS';
+
     const auth = localStorage.getItem('admin_auth');
     if (!auth) router.push('/admin/login');
 
-    const syncLocal = () => {
-      try {
-        const savedDemo = localStorage.getItem('siboy_demo_mode');
-        if (savedDemo !== null) setIsDemoMode(JSON.parse(savedDemo));
-      } catch (e) {}
-    };
-
-    syncLocal();
     fetchDbData();
 
-    // Polling tiap 5 detik agar status dan angka omzet selalu live
-    const interval = setInterval(fetchDbData, 5000);
-    window.addEventListener('storage', syncLocal);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('storage', syncLocal);
-    };
+    // Polling tiap 4 detik agar sinkron live
+    const interval = setInterval(fetchDbData, 4000);
+    return () => clearInterval(interval);
   }, [router]);
+
+  // RESET TOTAL TRANSAKSI KE 0 (DANGER ZONE DI DRAWER SETTINGS)
+  const handleResetAllData = async () => {
+    const confirmation = window.confirm(
+      'PERINGATAN AUDIT SISTEM:\n\nSemua riwayat pesanan, omzet kasir, dan antrean dapur di Supabase akan dihapus permanen menjadi Rp 0.\n\nApakah Anda yakin ingin mengosongkan seluruh database?'
+    );
+
+    if (!confirmation) return;
+
+    setIsResetting(true);
+    try {
+      const res = await fetch('/api/orders?reset_all=true', { method: 'DELETE' });
+      const json = await res.json();
+
+      if (json.success) {
+        localStorage.removeItem('siboy_order_history');
+        localStorage.removeItem('siboy_kitchen_orders');
+
+        alert('Database bersih! Seluruh transaksi berhasil di-reset ke 0.');
+        fetchDbData();
+        setIsDrawerOpen(false);
+      } else {
+        alert(json.message || 'Gagal mereset data transaksi.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Koneksi ke Supabase gagal saat mencoba mereset.');
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   // TOGGLE STATUS BUKA / TUTUP TOKO GLOBAL KE SUPABASE
   const toggleStoreStatus = async () => {
@@ -159,13 +181,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const toggleDemoMode = () => {
-    const nextMode = !isDemoMode;
-    setIsDemoMode(nextMode);
-    localStorage.setItem('siboy_demo_mode', JSON.stringify(nextMode));
-    window.dispatchEvent(new Event('storage'));
-  };
-
   const getPeriodLabel = () => {
     if (period === 'today') return 'Hari Ini';
     if (period === 'week') return '7 Hari Terakhir';
@@ -177,12 +192,12 @@ export default function AdminDashboard() {
     return 'Hari Ini';
   };
 
-  // Kalkulasi Transaksi
+  // KALKULASI TRANSAKSI 100% REAL-TIME DARI SUPABASE
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
-  let liveRev = 0;
-  let liveSold = 0;
+  let finalRev = 0;
+  let finalSold = 0;
   let sHour = { 16: 0, 17: 0, 18: 0, 19: 0, 20: 0, 21: 0, 22: 0 };
   let sDay = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
   let pType = { besar: 0, kecil: 0, special: 0 };
@@ -190,6 +205,12 @@ export default function AdminDashboard() {
   rawHistory.forEach(ord => {
     const orderTimestamp = ord.timestamp || (ord.date ? new Date(ord.date).getTime() : null);
     if (!orderTimestamp) return;
+
+    // Filter Standar Industri: Abaikan pesanan batal dan belum terverifikasi
+    const s = ord.status;
+    if (s === 'cancelled' || s === 'dibatalkan' || s === 'batal' || s === 'waiting_verification') {
+      return;
+    }
 
     const ordTimeObj = new Date(orderTimestamp);
     const ordTimeMs = ordTimeObj.getTime();
@@ -210,7 +231,7 @@ export default function AdminDashboard() {
 
     if (include) {
       const rawVal = ord.rawTotal ?? 0;
-      liveRev += Number(rawVal) || 0;
+      finalRev += Number(rawVal) || 0;
 
       let qtyInOrder = 0;
       if (ord.items && Array.isArray(ord.items) && ord.items.length > 0) {
@@ -227,7 +248,7 @@ export default function AdminDashboard() {
         pType.besar += 1;
       }
 
-      liveSold += qtyInOrder;
+      finalSold += qtyInOrder;
 
       const h = ordTimeObj.getHours();
       if (h >= 16 && h <= 22) {
@@ -244,25 +265,13 @@ export default function AdminDashboard() {
     }
   });
 
-  let mult = 1;
-  if (period === 'week') mult = 7;
-  if (period === 'month') mult = 30;
-  if (period === 'date') mult = 1;
-
-  const baseDailyRev = 345000;
-  const baseDailySold = 28;
-  
-  const finalRev = (isDemoMode ? (baseDailyRev * mult) : 0) + liveRev;
-  const finalSold = (isDemoMode ? (baseDailySold * Math.round(mult)) : 0) + liveSold;
   const finalAvg = finalSold > 0 ? Math.round(finalRev / finalSold) : 0;
   const displayAvg = `Rp ${finalAvg.toLocaleString('id-ID')}`;
-  const activeAntrean = isDemoMode && period !== 'date' ? Math.max(4, kitchenCount) : kitchenCount;
 
-  // Builder Grafik Jam Ramai
-  const baseWave = [4, 12, 18, 15, 9, 6, 2].map(v => Math.round(v * mult));
-  const waveData = baseWave.map((bVal, i) => {
+  // Builder Grafik Jam Ramai Real-Time
+  const waveData = [0, 1, 2, 3, 4, 5, 6].map(i => {
     const h = 16 + i;
-    const val = (isDemoMode ? bVal : 0) + (sHour[h] || 0);
+    const val = sHour[h] || 0;
     return { hour: `${h}:00`, x: 25 + (i * 70), val };
   });
 
@@ -272,27 +281,20 @@ export default function AdminDashboard() {
   const areaPathData = `${pathData} L 445 90 L 25 90 Z`;
   const topHour = waveData.reduce((max, obj) => obj.val > max.val ? obj : max, waveData[0]);
 
-  // Siklus Harian
-  const baseDays = [20, 24, 22, 29, 38, 44, 32].map(v => Math.round(v * (mult / 7 || 1)));
+  // Siklus Harian Real-Time
   const dayNames = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-  
-  const daysTraffic = dayNames.map((day, i) => {
-    const val = (isDemoMode ? baseDays[i] : 0) + (sDay[i] || 0);
-    return { day, val };
-  });
-  
-  const maxDayVal = Math.max(...daysTraffic.map(d => d.val), 10);
+  const daysTraffic = dayNames.map((day, i) => ({ day, val: sDay[i] || 0 }));
+  const maxDayVal = Math.max(...daysTraffic.map(d => d.val), 5);
   daysTraffic.forEach(d => { 
     d.pct = `${(d.val / maxDayVal) * 100}%`; 
     d.isPeak = d.val === maxDayVal && d.val > 0;
   });
 
-  // Tipe Kardus
-  const basePortions = { besar: Math.round(15 * mult), kecil: Math.round(9 * mult), special: Math.round(4 * mult) };
+  // Tipe Kardus Real-Time
   const portionData = [
-    { label: 'Porsi Besar', pcs: (isDemoMode ? basePortions.besar : 0) + pType.besar, color: '#ef4444' },
-    { label: 'Porsi Kecil', pcs: (isDemoMode ? basePortions.kecil : 0) + pType.kecil, color: '#3b82f6' },
-    { label: 'Porsi Special', pcs: (isDemoMode ? basePortions.special : 0) + pType.special, color: '#10b981' }
+    { label: 'Porsi Besar', pcs: pType.besar, color: '#ef4444' },
+    { label: 'Porsi Kecil', pcs: pType.kecil, color: '#3b82f6' },
+    { label: 'Porsi Special', pcs: pType.special, color: '#10b981' }
   ];
 
   const totalBox = portionData.reduce((acc, curr) => acc + curr.pcs, 0);
@@ -322,7 +324,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // 1. UPDATE STATUS TOPPING (AMAN -> MENIPIS -> HABIS) KE SUPABASE
+  // UPDATE STATUS TOPPING KE SUPABASE
   const cycleToppingStatus = async (id) => {
     const target = toppings.find(t => t.id === id);
     if (!target) return;
@@ -363,7 +365,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // 2. TAMBAH JENIS TOPPING BARU KE SUPABASE
+  // TAMBAH TOPPING BARU
   const handleAddTopping = async () => {
     if (!newToppingName.trim()) return setToppingError('Nama tidak boleh kosong.');
 
@@ -388,7 +390,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // 3. HAPUS TOPPING DARI SUPABASE
+  // HAPUS TOPPING
   const handleDeleteTopping = async (id) => {
     const backup = [...toppings];
     setToppings(prev => prev.filter(t => t.id !== id));
@@ -417,7 +419,7 @@ export default function AdminDashboard() {
 
       <div className={`max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 relative z-10 space-y-6 transition-all duration-300 ${isDrawerOpen || isSidebarOpen ? 'opacity-40 blur-sm pointer-events-none' : ''}`}>
         
-        {/* HEADER & FILTER */}
+        {/* HEADER BERSIH & PROFESIONAL */}
         <div className="bg-white/80 backdrop-blur-md rounded-3xl border-2 border-slate-100 p-4 sm:p-5 sm:px-7 shadow-sm flex flex-col sm:flex-row gap-4 justify-between items-center relative z-20">
           
           <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -439,7 +441,7 @@ export default function AdminDashboard() {
                 </span>
               </div>
               <div className="flex items-center gap-2 mt-0.5">
-                <p className="text-[10px] sm:text-[11px] font-bold text-slate-400">Dashboard {getPeriodLabel()}</p>
+                <p className="text-[10px] sm:text-[11px] font-bold text-slate-400">Dashboard Live {getPeriodLabel()}</p>
                 {period === 'date' && (
                   <button 
                     type="button"
@@ -454,20 +456,8 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-            <button 
-              type="button"
-              onClick={toggleDemoMode}
-              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer ${
-                isDemoMode ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-              }`}
-              title="Ganti Mode Simulasi (DEMO) atau Data Kasir Murni (LIVE)"
-            >
-              <Activity className="w-3.5 h-3.5" />
-              Mode: {isDemoMode ? 'DEMO' : 'LIVE'}
-            </button>
-
-            <div className="w-px h-6 bg-slate-200 hidden sm:block"></div>
-
+            
+            {/* Filter Kalender & Periode */}
             <div className="relative">
               <button 
                 type="button" 
@@ -535,7 +525,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* 3 KARTU METRIK UTAMA */}
+        {/* 3 KARTU METRIK UTAMA 100% REAL-TIME */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
           <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl p-5 sm:p-6 text-white shadow-[0_12px_30px_rgb(16,185,129,0.2)] flex flex-col justify-between">
             <div>
@@ -546,7 +536,7 @@ export default function AdminDashboard() {
               <p className="text-2xl sm:text-3xl font-black text-white tracking-tight" style={{ fontFamily: "'Montserrat', sans-serif" }}>Rp {finalRev.toLocaleString('id-ID')}</p>
             </div>
             <div className="pt-3 border-t border-white/20 flex items-center justify-between text-[10px] sm:text-xs font-bold text-white/90 mt-5">
-              {isDemoMode && period === 'today' ? <span className="flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5"/> +15% vs kemarin</span> : <span>Omzet {getPeriodLabel()}</span>}
+              <span>Omzet {getPeriodLabel()}</span>
               <span className="text-white/70">Database Supabase</span>
             </div>
           </div>
@@ -570,7 +560,7 @@ export default function AdminDashboard() {
                 <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest">Antrean Dapur</span>
                 <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/20 flex items-center justify-center"><Clock className="w-4 h-4 sm:w-5 sm:h-5 text-white" /></div>
               </div>
-              <p className="text-2xl sm:text-3xl font-black text-white tracking-tight" style={{ fontFamily: "'Montserrat', sans-serif" }}>{activeAntrean} <span className="text-sm font-bold text-white/80">Pesanan</span></p>
+              <p className="text-2xl sm:text-3xl font-black text-white tracking-tight" style={{ fontFamily: "'Montserrat', sans-serif" }}>{kitchenCount} <span className="text-sm font-bold text-white/80">Pesanan</span></p>
             </div>
             <div className="pt-3 border-t border-white/20 flex items-center justify-between text-[10px] sm:text-xs font-bold text-white/90 mt-5">
               <span className="text-white/80">Di Layar KDS</span>
@@ -581,7 +571,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* AREA GRAFIK */}
+        {/* AREA GRAFIK REAL-TIME */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <div className="lg:col-span-5 bg-white rounded-3xl border-2 border-slate-100 p-5 sm:p-6 shadow-sm flex flex-col justify-between relative">
             <div className="flex items-start justify-between pb-3 border-b border-slate-100">
@@ -696,7 +686,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* STATUS BAHAN TOPPING (TERHUBUNG KE SUPABASE) */}
+        {/* STATUS BAHAN TOPPING */}
         <div className="bg-white rounded-3xl border-2 border-slate-100 p-5 sm:p-6 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-4 border-b border-slate-100">
             <div>
@@ -746,7 +736,7 @@ export default function AdminDashboard() {
 
       </div>
 
-      {/* DRAWER PENGATURAN HARGA & BAHAN */}
+      {/* DRAWER PENGATURAN HARGA, BAHAN, & ZONA DESTRUKTIF */}
       {isDrawerOpen && <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40 transition-opacity" onClick={() => setIsDrawerOpen(false)} />}
       <div className={`fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out border-l border-slate-200 flex flex-col ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         
@@ -762,6 +752,7 @@ export default function AdminDashboard() {
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8 [&::-webkit-scrollbar]:hidden">
           
+          {/* BAGIAN HARGA MENU */}
           <section className="space-y-3">
             <div className="border-b border-slate-100 pb-2">
               <h3 className="text-xs font-black uppercase tracking-widest text-slate-800">Ubah Harga Menu</h3>
@@ -844,6 +835,26 @@ export default function AdminDashboard() {
                 </div>
               ))}
             </div>
+          </section>
+
+          {/* DANGER ZONE: RESET TOTAL (STANDAR POS INDUSTRI) */}
+          <section className="space-y-3 pt-4 border-t-2 border-dashed border-rose-200">
+            <div className="flex items-center gap-2 text-rose-700">
+              <AlertTriangle className="w-4 h-4" />
+              <h3 className="text-xs font-black uppercase tracking-wider">Zona Berbahaya (Audit Data)</h3>
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+              Fitur khusus untuk mengosongkan riwayat transaksi database Supabase. Gunakan sebelum sesi presentasi atau saat memulai buku kas baru agar grafik dan omzet kembali murni ke Rp 0.
+            </p>
+            <button
+              type="button"
+              disabled={isResetting}
+              onClick={handleResetAllData}
+              className="w-full py-3 px-4 rounded-xl border border-rose-300 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+            >
+              <RotateCcw className={`w-4 h-4 ${isResetting ? 'animate-spin' : ''}`} />
+              <span>{isResetting ? 'Mengosongkan Database...' : 'Kosongkan Semua Transaksi (0)'}</span>
+            </button>
           </section>
 
         </div>

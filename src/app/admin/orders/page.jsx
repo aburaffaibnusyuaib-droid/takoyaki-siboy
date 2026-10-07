@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { 
   Search, FileText, Download, MoreHorizontal, 
   X, Eye, Printer, Trash2, Receipt, Menu,
-  DollarSign, TrendingUp, CreditCard, Banknote, RefreshCw
+  TrendingUp, CreditCard, Banknote, RefreshCw
 } from 'lucide-react';
 
 import AdminSidebar from '@/components/AdminSidebar';
@@ -27,7 +27,7 @@ export default function OrderHistory() {
   const loadOrdersFromDb = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/orders');
+      const res = await fetch('/api/orders', { cache: 'no-store' });
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         const mapped = json.data.map((o) => {
@@ -42,10 +42,7 @@ export default function OrderHistory() {
             minute: '2-digit'
           });
 
-          // Deteksi metode bayar dari notes
           const isQris = (o.notes || '').toUpperCase().includes('QRIS');
-
-          // Ekstrak nomor antrean [#01] jika ada
           const queueMatch = o.notes?.match(/\[#(.*?)\]/);
           const queueBadge = queueMatch ? `#${queueMatch[1]}` : `#${o.id.slice(-3)}`;
 
@@ -59,7 +56,7 @@ export default function OrderHistory() {
             totalPrice: o.totalPrice || 0,
             total: `Rp ${(o.totalPrice || 0).toLocaleString('id-ID')}`,
             pay: isQris ? 'QRIS' : 'CASH',
-            stat: o.status || 'pending',
+            stat: (o.status || 'pending').toLowerCase(),
             notes: o.notes || '',
             items: (o.items || []).map((it) => ({
               id: it.id,
@@ -81,6 +78,10 @@ export default function OrderHistory() {
 
   useEffect(() => {
     setIsMounted(true);
+
+    // Judul Tab Browser Standar Industri POS
+    document.title = 'Order History | Siboy POS';
+
     const auth = localStorage.getItem('admin_auth');
     if (!auth) router.push('/admin/login');
 
@@ -125,13 +126,21 @@ export default function OrderHistory() {
       return idMatch || nameMatch || typeMatch;
     });
 
-  // Metrik Ringkasan Omzet
-  const totalOmzet = filteredData.reduce((acc, curr) => acc + (curr.totalPrice || 0), 0);
-  const totalCash = filteredData.filter(d => d.pay === 'CASH').reduce((acc, curr) => acc + (curr.totalPrice || 0), 0);
-  const totalQris = filteredData.filter(d => d.pay === 'QRIS').reduce((acc, curr) => acc + (curr.totalPrice || 0), 0);
+  // Hanya pesanan sah (bukan dibatalkan/unverified) yang dihitung omzetnya
+  const validCompletedOrders = filteredData.filter(d => 
+    d.stat !== 'cancelled' && 
+    d.stat !== 'dibatalkan' && 
+    d.stat !== 'batal' && 
+    d.stat !== 'waiting_verification'
+  );
 
+  const totalOmzet = validCompletedOrders.reduce((acc, curr) => acc + (curr.totalPrice || 0), 0);
+  const totalCash = validCompletedOrders.filter(d => d.pay === 'CASH').reduce((acc, curr) => acc + (curr.totalPrice || 0), 0);
+  const totalQris = validCompletedOrders.filter(d => d.pay === 'QRIS').reduce((acc, curr) => acc + (curr.totalPrice || 0), 0);
+
+  // Hapus transaksi tunggal (untuk membuang data uji coba spesifik)
   const handleDelete = async (id) => {
-    if (confirm(`Yakin ingin menghapus data transaksi ${id} dari database?`)) {
+    if (confirm(`Yakin ingin menghapus data transaksi ${id} dari database Supabase?`)) {
       try {
         const res = await fetch(`/api/orders?id=${id}`, { method: 'DELETE' });
         const json = await res.json();
@@ -184,7 +193,7 @@ export default function OrderHistory() {
 
       <div className={`max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 relative z-10 space-y-6 transition-all duration-300 ${isSidebarOpen ? 'opacity-40 blur-sm pointer-events-none' : ''}`}>
         
-        {/* HEADER */}
+        {/* HEADER BERSIH (STANDAR ENTERPRISE) */}
         <div className="bg-white/80 backdrop-blur-md rounded-3xl border-2 border-slate-100 p-4 sm:p-5 sm:px-7 shadow-sm flex items-center justify-between gap-4 print:hidden">
           <div className="flex items-center gap-3 sm:gap-4">
             <button 
@@ -198,17 +207,18 @@ export default function OrderHistory() {
               <h1 className="text-xl sm:text-3xl font-black uppercase tracking-tight text-slate-800 leading-none" style={{ fontFamily: "'Montserrat', sans-serif" }}>
                 ORDER <span className="text-indigo-600">HISTORY</span>
               </h1>
-              <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1 hidden sm:block">History penjualan selama ini .</p>
+              <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1 hidden sm:block">Audit & Riwayat Transaksi Supabase</p>
             </div>
           </div>
 
+          {/* Refresh Bersih (Icon Button Minimalis) */}
           <button
             type="button"
             onClick={loadOrdersFromDb}
-            className="flex items-center gap-1.5 text-xs font-black uppercase px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 text-slate-600 transition-all cursor-pointer active:scale-95"
+            className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 shadow-sm transition-all cursor-pointer active:scale-95"
+            title="Muat Ulang Transaksi"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Refresh Data</span>
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-indigo-600' : ''}`} />
           </button>
         </div>
 
@@ -216,9 +226,9 @@ export default function OrderHistory() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 print:hidden">
           <div className="bg-white rounded-2xl p-5 border-2 border-slate-100 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Omzet</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Omzet Sah</p>
               <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-1">Rp {totalOmzet.toLocaleString('id-ID')}</h3>
-              <p className="text-[10px] font-bold text-slate-400 mt-0.5">{filteredData.length} Transaksi</p>
+              <p className="text-[10px] font-bold text-slate-400 mt-0.5">{validCompletedOrders.length} Transaksi Selesai</p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
               <TrendingUp className="w-6 h-6" />
@@ -240,21 +250,12 @@ export default function OrderHistory() {
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-sky-600">QRIS Non-Tunai</p>
               <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-1">Rp {totalQris.toLocaleString('id-ID')}</h3>
-              <p className="text-[10px] font-bold text-slate-400 mt-0.5">Masuk Rekening/e-Wallet</p>
+              <p className="text-[10px] font-bold text-slate-400 mt-0.5">Masuk Rekening / e-Wallet</p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-sky-50 border border-sky-100 text-sky-600 flex items-center justify-center">
               <CreditCard className="w-6 h-6" />
             </div>
           </div>
-        </div>
-
-        {/* KOP CETAK DOKUMEN */}
-        <div className="hidden print:block text-center border-b-2 border-slate-800 pb-4 mb-6 pt-8">
-          <h1 className="text-2xl font-black uppercase tracking-widest text-slate-900" style={{ fontFamily: "'Montserrat', sans-serif" }}>TAKOYAKI SIBOY</h1>
-          <p className="text-sm font-bold text-slate-600 mt-1">Laporan Penjualan & Audit Transaksi Supabase</p>
-          <p className="text-xs text-slate-500 mt-1">
-            Dicetak pada: {isMounted ? `${new Date().toLocaleDateString('id-ID')} ${new Date().toLocaleTimeString('id-ID')}` : '-'}
-          </p>
         </div>
 
         {/* TABEL TRANSAKSI */}
@@ -326,6 +327,7 @@ export default function OrderHistory() {
                     const isWaiting = rawStatus === 'pending' || rawStatus === 'waiting_verification';
                     const isCooking = rawStatus === 'cooking';
                     const isDone = rawStatus === 'selesai' || rawStatus === 'ready';
+                    const isCancelled = rawStatus === 'cancelled' || rawStatus === 'dibatalkan' || rawStatus === 'batal';
 
                     return (
                       <tr key={row.id} className="hover:bg-slate-50/50 transition-colors group">
@@ -352,21 +354,25 @@ export default function OrderHistory() {
                           )}
                         </td>
                         <td className="p-4">
-                          <span className="text-xs font-black text-slate-800 block mb-1">{row.total}</span>
+                          <span className={`text-xs font-black block mb-1 ${isCancelled ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                            {row.total}
+                          </span>
                           <span className={`inline-block text-[8px] font-black uppercase px-2 py-0.5 rounded-md border ${row.pay === 'QRIS' ? 'bg-sky-50 text-sky-600 border-sky-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
                             {row.pay}
                           </span>
                         </td>
                         <td className="p-4 text-center">
                           <span className={`inline-block text-[9px] font-black uppercase px-2.5 py-1 rounded-full border print:border-slate-400
-                            ${isWaiting 
-                              ? 'bg-amber-100 text-amber-700 border-amber-200' 
-                              : isCooking
-                                ? 'bg-red-100 text-red-700 border-red-200'
-                                : isDone 
-                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
-                                  : 'bg-slate-100 text-slate-600 border-slate-200'} print:text-black print:bg-transparent`}>
-                            {isWaiting ? 'Menunggu' : isCooking ? 'Dimasak' : isDone ? 'Selesai' : row.stat}
+                            ${isCancelled
+                              ? 'bg-rose-100 text-rose-700 border-rose-200'
+                              : isWaiting 
+                                ? 'bg-amber-100 text-amber-700 border-amber-200' 
+                                : isCooking
+                                  ? 'bg-red-100 text-red-700 border-red-200'
+                                  : isDone 
+                                    ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
+                                    : 'bg-slate-100 text-slate-600 border-slate-200'} print:text-black print:bg-transparent`}>
+                            {isCancelled ? 'Dibatalkan' : isWaiting ? 'Menunggu' : isCooking ? 'Dimasak' : isDone ? 'Selesai' : row.stat}
                           </span>
                         </td>
                         
@@ -391,7 +397,7 @@ export default function OrderHistory() {
                                 </button>
                                 <div className="h-px bg-slate-100 my-1"></div>
                                 <button type="button" onClick={() => handleDelete(row.id)} className="flex items-center gap-2 px-3 py-2 text-[10px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left cursor-pointer">
-                                  <Trash2 className="w-3.5 h-3.5" /> Hapus Data
+                                  <Trash2 className="w-3.5 h-3.5" /> Hapus Baris
                                 </button>
                               </div>
                             </>
@@ -406,7 +412,7 @@ export default function OrderHistory() {
           </div>
 
           <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-between bg-slate-50/30 rounded-b-3xl print:hidden">
-            <span className="text-[10px] font-bold text-slate-400">Total: {filteredData.length} Transaksi Tercatat di Database</span>
+            <span className="text-[10px] font-bold text-slate-400">Total: {filteredData.length} Catatan Masuk Database</span>
           </div>
         </div>
       </div>

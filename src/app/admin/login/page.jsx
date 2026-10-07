@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, ArrowLeft, KeyRound } from 'lucide-react';
 import Link from 'next/link';
@@ -9,6 +9,11 @@ export default function AdminLogin() {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
   const router = useRouter();
+
+  // Ubah judul tab browser secara dinamis di Client Component
+  useEffect(() => {
+    document.title = 'Login Petugas Kasir | Siboy POS';
+  }, []);
 
   // PIN rahasia untuk akses admin
   const SECRET_PIN = '1234';

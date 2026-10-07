@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { Flame, UtensilsCrossed, Store } from 'lucide-react';
+import { Flame, UtensilsCrossed } from 'lucide-react';
 
 const DEFAULT_PRICES = { kecil: 6000, besar: 12000, special: 17000 };
 
@@ -21,7 +21,12 @@ export default function Menu({ onSelectPackage, isOpenStore = true }) {
           if (m.slug === 'besar') updated.besar = m.price;
           if (m.slug === 'special') updated.special = m.price;
         });
+
         setPrices(updated);
+
+        try {
+          localStorage.setItem('siboy_menu_prices', JSON.stringify(updated));
+        } catch (e) {}
       }
     } catch (e) {
       console.error('Gagal mengambil daftar harga menu:', e);
@@ -29,6 +34,14 @@ export default function Menu({ onSelectPackage, isOpenStore = true }) {
   };
 
   useEffect(() => {
+    // Ambil cache harga setelah komponen mount di client agar tidak memicu hydration mismatch
+    try {
+      const cached = localStorage.getItem('siboy_menu_prices');
+      if (cached) {
+        setPrices(JSON.parse(cached));
+      }
+    } catch (e) {}
+
     fetchMenuFromDb();
 
     // Polling berkala tiap 10 detik agar harga selalu sinkron jika admin mengubahnya
@@ -154,8 +167,6 @@ export default function Menu({ onSelectPackage, isOpenStore = true }) {
           >
             Dibuat fresh langsung dari wajan panggang setiap hari
           </p>
-
-          
         </div>
 
         {/* Grid Kartu Menu */}
@@ -222,7 +233,8 @@ export default function Menu({ onSelectPackage, isOpenStore = true }) {
 
                 <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between">
                   <span
-                    className="text-2xl font-black text-red-600 tracking-tight"
+                    suppressHydrationWarning
+                    className="text-2xl font-black text-red-600 tracking-tight transition-opacity duration-200"
                     style={{ fontFamily: "'Montserrat', sans-serif" }}
                   >
                     {item.price}

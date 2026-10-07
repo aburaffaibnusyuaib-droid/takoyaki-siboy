@@ -1,20 +1,26 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-// GET: Ambil daftar pesanan, detail single order via ?id=..., ATAU generate antrean harian
+// Helper pembersih angka agar anti-NaN
+const sanitizeNumber = (val) => {
+  if (typeof val === 'number') return Math.round(val);
+  if (!val) return 0;
+  const cleaned = String(val).replace(/\D/g, '');
+  return cleaned ? parseInt(cleaned, 10) : 0;
+};
+
+// GET: Ambil daftar pesanan, single detail, atau nomor antrean berikutnya
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
     const id = searchParams.get('id');
 
-    // 1. Jika Live Ticket meminta data 1 pesanan spesifik via ?id=SB-...
+    // 1. Single Order untuk Karcis / Ticket Tracker
     if (id) {
       const singleOrder = await prisma.order.findUnique({
         where: { id },
-        include: {
-          items: true,
-        },
+        include: { items: true },
       });
 
       if (!singleOrder) {
@@ -27,22 +33,33 @@ export async function GET(request) {
       return NextResponse.json({ success: true, data: singleOrder });
     }
 
-    // 2. Jika Kasir POS meminta nomor antrean harian berikutnya
+    // 2. Generator Nomor Antrean Harian (Anti-Duplikat meskipun ada baris dihapus)
     if (action === 'next_queue') {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
 
-      const countToday = await prisma.order.count({
+      // Cari order hari ini dengan id terakhir
+      const lastOrderToday = await prisma.order.findFirst({
         where: {
-          createdAt: {
-            gte: startOfDay,
-          },
+          createdAt: { gte: startOfDay },
         },
+        orderBy: { createdAt: 'desc' },
       });
 
-      const nextNumber = countToday + 1;
+      let nextNumber = 1;
+      if (lastOrderToday) {
+        // Ambil nomor dari notes [#01] atau 3 digit ID paling belakang
+        const match = lastOrderToday.notes?.match(/\[#(\d+)\]/);
+        if (match) {
+          nextNumber = parseInt(match[1], 10) + 1;
+        } else {
+          const parts = lastOrderToday.id.split('-');
+          const lastSeq = parseInt(parts[parts.length - 1], 10);
+          nextNumber = !isNaN(lastSeq) ? lastSeq + 1 : 1;
+        }
+      }
+
       const formattedQ = `#${String(nextNumber).padStart(2, '0')}`;
-      
       const now = new Date();
       const yy = String(now.getFullYear()).slice(-2);
       const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -57,14 +74,10 @@ export async function GET(request) {
       });
     }
 
-    // 3. Default: Ambil seluruh daftar pesanan untuk Dapur & Riwayat
+    // 3. Default: Seluruh Pesanan (urut terbaru)
     const orders = await prisma.order.findMany({
-      include: {
-        items: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      include: { items: true },
+      orderBy: { createdAt: 'desc' },
     });
 
     return NextResponse.json({ success: true, data: orders });
@@ -76,7 +89,7 @@ export async function GET(request) {
   }
 }
 
-// POST: Simpan transaksi baru dari Kasir POS
+// POST: Simpan transaksi baru dari Kasir POS / Checkout
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -89,17 +102,19 @@ export async function POST(request) {
       );
     }
 
+    const cleanTotal = sanitizeNumber(totalPrice);
+
     const orderData = {
-      customerName: customerName || 'Pelanggan Walk-in',
-      customerPhone: customerPhone || '-',
-      totalPrice: parseInt(totalPrice),
-      status: status || 'pending',
+      customerName: customerName ? String(customerName).trim() : 'Pelanggan Walk-in',
+      customerPhone: customerPhone ? String(customerPhone).trim() : '-',
+      totalPrice: cleanTotal,
+      status: (status || 'pending').toLowerCase(),
       notes: notes || null,
       items: {
         create: items.map((item) => ({
-          menuName: item.name,
-          quantity: parseInt(item.quantity || item.qty),
-          price: parseInt(item.price),
+          menuName: item.name || 'Takoyaki',
+          quantity: sanitizeNumber(item.quantity || item.qty) || 1,
+          price: sanitizeNumber(item.price),
         })),
       },
     };
@@ -110,9 +125,7 @@ export async function POST(request) {
 
     const order = await prisma.order.create({
       data: orderData,
-      include: {
-        items: true,
-      },
+      include: { items: true },
     });
 
     return NextResponse.json({ success: true, data: order }, { status: 201 });
@@ -124,7 +137,7 @@ export async function POST(request) {
   }
 }
 
-// PATCH: Update status pesanan dari Layar Dapur (pending -> cooking -> SELESAI)
+// PATCH: Update status pesanan (diseragamkan ke lowercase)
 export async function PATCH(request) {
   try {
     const body = await request.json();
@@ -137,9 +150,12 @@ export async function PATCH(request) {
       );
     }
 
+    // Normalisasi status ke huruf kecil baku
+    const normalizedStatus = String(status).toLowerCase();
+
     const updatedOrder = await prisma.order.update({
       where: { id },
-      data: { status },
+      data: { status: normalizedStatus },
       include: { items: true },
     });
 
@@ -152,12 +168,24 @@ export async function PATCH(request) {
   }
 }
 
-// DELETE: Hapus riwayat pesanan dari Supabase
+// DELETE: Hapus 1 pesanan ATAU Reset Total ke 0
 export async function DELETE(request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const resetAll = searchParams.get('reset_all');
 
+    // Reset Total (Bersihkan semua order & item)
+    if (resetAll === 'true') {
+      await prisma.orderItem.deleteMany({});
+      await prisma.order.deleteMany({});
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Seluruh pesanan berhasil di-reset menjadi 0' 
+      });
+    }
+
+    // Hapus Satuan
     if (!id) {
       return NextResponse.json(
         { success: false, message: 'ID pesanan diperlukan' },

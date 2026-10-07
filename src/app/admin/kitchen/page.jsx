@@ -23,6 +23,11 @@ export default function KitchenView() {
 
   const prevWaitingCountRef = useRef(0);
 
+  // Set Judul Tab Browser Dinamis
+  useEffect(() => {
+    document.title = 'Kitchen Display (KDS) | Siboy POS';
+  }, []);
+
   // Notifikasi Suara Web Audio API
   const playAlertSound = () => {
     if (!isSoundEnabled) return;
@@ -54,6 +59,8 @@ export default function KitchenView() {
         mappedStatus = 'cooking';
       } else if (rawStatus === 'ready' || rawStatus === 'selesai' || rawStatus === 'siap') {
         mappedStatus = 'ready';
+      } else if (rawStatus === 'cancelled' || rawStatus === 'dibatalkan' || rawStatus === 'batal') {
+        mappedStatus = 'cancelled';
       } else if (rawStatus === 'waiting_verification' || rawStatus === 'waiting') {
         mappedStatus = 'waiting_verification';
       } else {
@@ -82,7 +89,7 @@ export default function KitchenView() {
         customerName: o.customerName || 'Pelanggan',
         notes: o.notes?.replace(/\[#(.*?)\]\s*/, '') || '',
         total: `Rp ${(o.totalPrice || 0).toLocaleString('id-ID')}`,
-        pay: o.notes?.includes('QRIS') ? 'QRIS' : 'CASH',
+        pay: (o.notes || '').toUpperCase().includes('QRIS') ? 'QRIS' : 'CASH',
         items: o.items?.map((it) => ({
           name: it.menuName,
           qty: it.quantity,
@@ -98,13 +105,15 @@ export default function KitchenView() {
   // Mengambil data dari Supabase via API
   const loadOrders = async () => {
     try {
-      const res = await fetch('/api/orders');
+      const res = await fetch('/api/orders', { cache: 'no-store' });
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         const formatted = formatDbToKitchen(json.data);
         
-        // Filter yang belum selesai
-        const activeOrders = formatted.filter(o => o.status !== 'ready');
+        // Buang status 'ready' dan 'cancelled' agar dapur benar-benar bersih saat pesanan tuntas
+        const activeOrders = formatted.filter(
+          o => o.status !== 'ready' && o.status !== 'cancelled'
+        );
         setOrders(activeOrders);
 
         // Suara alert bila ada order waiting baru
@@ -115,15 +124,11 @@ export default function KitchenView() {
         }
         prevWaitingCountRef.current = waitingCount;
 
-        // Sinkronisasi cadangan ke localStorage
+        // Simpan cache aktif
         localStorage.setItem('siboy_kitchen_orders', JSON.stringify(activeOrders));
       }
     } catch (e) {
-      // Fallback baca localStorage jika offline
-      try {
-        const saved = localStorage.getItem('siboy_kitchen_orders');
-        if (saved) setOrders(JSON.parse(saved));
-      } catch (err) {}
+      console.warn('Mode offline / gagal sinkron KDS');
     }
   };
 
@@ -158,10 +163,10 @@ export default function KitchenView() {
     patchStatusToSupabase(orderId, 'pending');
   };
 
-  // 2. Tolak Pesanan Fiktif
+  // 2. Tolak Pesanan Fiktif (Status: cancelled)
   const rejectOrder = (orderId) => {
     setOrders(prev => prev.filter(o => o.id !== orderId));
-    patchStatusToSupabase(orderId, 'DIBATALKAN');
+    patchStatusToSupabase(orderId, 'cancelled');
   };
 
   // 3. Masukkan ke Wajan (Pending -> Cooking)
@@ -173,7 +178,7 @@ export default function KitchenView() {
   // 4. Selesai (Cooking -> Ready)
   const finishOrder = (order) => {
     setOrders(prev => prev.filter(o => o.id !== order.id));
-    patchStatusToSupabase(order.id, 'SELESAI');
+    patchStatusToSupabase(order.id, 'ready');
 
     setLastFinishedOrder(order);
     setToastMessage(`Pesanan ${order.qNo} (${order.customerName || order.name}) Selesai!`);

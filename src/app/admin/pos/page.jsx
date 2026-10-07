@@ -18,7 +18,7 @@ const BeefSteakIcon = ({ className = 'w-4 h-4' }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 6.5C17.5 4 13.5 3 9 4.5S3 9 3 13.5c0 4.5 3.5 7.5 8 7.5s9.5-3 9.5-7.5c0-2.5-.5-5-1.5-7z" /><ellipse cx="10" cy="11.5" rx="2.5" ry="1.8" fill="currentColor" fillOpacity="0.2" /><path d="M14 9.5c1.5 1 2.5 3 1.5 5" /><path d="M7 16c1.5.5 3 0 4-.5" /></svg>
 );
 const CrabIcon = ({ className = 'w-4 h-4' }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><ellipse cx="12" cy="14" rx="5" ry="4" /><path d="M7 11c-2-3-4-2-4 1 0 2 2 3 4 2" /><path d="M17 11c2-3 4-2 4 1 0 2-2 3-4 2" /><path d="M6 15l-3 2" /><path d="M6 17l-2 3" /><path d="M18 15l3 2" /><path d="M18 17l2 3" /></svg>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={className}><ellipse cx="12" cy="14" rx="5" ry="4" /><path d="M7 11c-2-3-4-2-4 1 0 2 2 3 4 2" /><path d="M17 11c2-3 4-2 4 1 0 2-2 3-4 2" /><path d="M6 15l-3 2" /><path d="M6 17l-2 3" /><path d="M18 15l3 2" /><path d="M18 17l2 3" /></svg>
 );
 const CheeseWedgeIcon = ({ className = 'w-4.5 h-4.5' }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 18h18L18 8 3 13v5z" /><path d="M3 13l15-5" /><circle cx="8" cy="15.5" r="1" fill="currentColor" /><circle cx="14" cy="14" r="1.3" fill="currentColor" /><circle cx="12" cy="11" r="0.8" fill="currentColor" /></svg>
@@ -338,6 +338,9 @@ export default function POSPage() {
   };
 
   useEffect(() => {
+    // Judul Tab Browser Standar Industri POS
+    document.title = 'Kasir Terminal POS | Siboy POS';
+
     if (typeof window !== 'undefined') {
       setBaseUrl(window.location.origin);
       localStorage.setItem('admin_auth', 'true');

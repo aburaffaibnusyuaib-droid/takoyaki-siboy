@@ -4,8 +4,11 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { 
   CheckCircle2, Clock, Flame, Receipt, 
-  ChevronRight, Store, Sparkles, Banknote, QrCode, RefreshCw
+  ChevronRight, Store, Sparkles, Banknote, QrCode, RefreshCw,
+  MessageCircle, XCircle
 } from 'lucide-react';
+
+const WA_BUSINESS_PHONE = '628567637987';
 
 const InstagramIcon = ({ className = 'w-4 h-4' }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -23,11 +26,11 @@ function TicketContent() {
   const [currentOrder, setCurrentOrder] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Ambil data pesanan langsung dari Supabase via API
+  // Ambil data pesanan langsung dari Supabase tanpa cache browser
   const fetchOrderLive = async () => {
     if (!targetId) {
       try {
-        const res = await fetch('/api/orders');
+        const res = await fetch('/api/orders', { cache: 'no-store' });
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           parseAndSetOrder(json.data[0]);
@@ -43,7 +46,7 @@ function TicketContent() {
     }
 
     try {
-      const res = await fetch(`/api/orders?id=${targetId}`);
+      const res = await fetch(`/api/orders?id=${encodeURIComponent(targetId)}`, { cache: 'no-store' });
       const json = await res.json();
 
       if (json.success && json.data) {
@@ -67,6 +70,8 @@ function TicketContent() {
       mappedStatus = 'cooking';
     } else if (rawStatus === 'ready' || rawStatus === 'selesai' || rawStatus === 'siap') {
       mappedStatus = 'ready';
+    } else if (rawStatus === 'cancelled' || rawStatus === 'dibatalkan' || rawStatus === 'batal') {
+      mappedStatus = 'cancelled';
     } else if (rawStatus === 'waiting_verification' || rawStatus === 'waiting') {
       mappedStatus = 'waiting_verification';
     } else {
@@ -86,22 +91,27 @@ function TicketContent() {
       : '-';
 
     const isQris = (dbOrder.notes || '').toUpperCase().includes('QRIS');
+    const cleanNotes = dbOrder.notes?.replace(/\[#(.*?)\]\s*/, '') || '';
+
+    // Update Judul Tab Dinamis sesuai Nomor Antrean
+    document.title = `Karcis ${queueBadge} | Takoyaki Siboy`;
 
     setCurrentOrder({
       id: dbOrder.id,
       queueNumber: queueBadge,
       status: mappedStatus,
       customerName: dbOrder.customerName || 'PELANGGAN',
+      customerPhone: dbOrder.customerPhone || '-',
       time: orderTime,
       total: `Rp ${(dbOrder.totalPrice || 0).toLocaleString('id-ID')}`,
+      numericTotal: dbOrder.totalPrice || 0,
       pay: isQris ? 'QRIS' : 'CASH',
+      notes: cleanNotes,
       items: (dbOrder.items || []).map((it) => ({
         name: it.menuName,
         qty: it.quantity,
         price: it.price,
-        toppings: it.menuName.includes('(') ? it.menuName.split('(')[1]?.replace(')', '') : 'Porsi Spesial',
-        veg: 'Pakai Sayur',
-        spicy: 'Normal'
+        toppings: it.menuName.includes('(') ? it.menuName.split('(')[1]?.replace(')', '') : 'Porsi Standar'
       }))
     });
   };
@@ -124,6 +134,8 @@ function TicketContent() {
       let liveStatus = activeInKitchen ? activeInKitchen.status : (matchedHistory.status || 'ready');
       let liveQueue = activeInKitchen?.qNo || matchedHistory.qNo || '#01';
 
+      document.title = `Karcis ${liveQueue} | Takoyaki Siboy`;
+
       setCurrentOrder({
         ...matchedHistory,
         status: liveStatus,
@@ -135,15 +147,44 @@ function TicketContent() {
 
   useEffect(() => {
     setIsMounted(true);
+    document.title = 'Live Order Ticket | Takoyaki Siboy';
     fetchOrderLive();
 
-    // Polling background setiap 3 detik
     const interval = setInterval(fetchOrderLive, 3000);
     return () => clearInterval(interval);
   }, [targetId]);
 
   const isUnverified = currentOrder?.status === 'waiting_verification';
   const isCash = currentOrder?.pay === 'CASH';
+
+  // Handler kirim pesan konfirmasi ke WhatsApp Bisnis
+  const handleSendToWhatsApp = () => {
+    if (!currentOrder) return;
+
+    const itemsSummary = (currentOrder.items || [])
+      .map((it) => `• ${it.qty}x ${it.name} (${it.toppings})`)
+      .join('\n');
+
+    const message = `Halo Takoyaki Siboy! 🐙
+Saya ingin konfirmasi pesanan dari web:
+
+🎫 *No. Antrean:* ${currentOrder.queueNumber}
+🆔 *Order ID:* ${currentOrder.id}
+👤 *Nama:* ${currentOrder.customerName}
+📞 *No. HP:* ${currentOrder.customerPhone || '-'}
+
+📦 *Menu Dipesan:*
+${itemsSummary || '-'}
+
+💰 *Total Pembayaran:* ${currentOrder.total}
+💳 *Metode Bayar:* ${currentOrder.pay} (${isUnverified ? 'Menunggu Kasir' : 'Lunas'})
+📍 *Metode Ambil:* Ambil di Gerai (Self Pick-up)
+
+Mohon dicek dan diproses ya kak. Terima kasih!`;
+
+    const waUrl = `https://wa.me/${WA_BUSINESS_PHONE}?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, '_blank');
+  };
 
   const statusConfig = {
     waiting_verification: {
@@ -166,6 +207,11 @@ function TicketContent() {
       bg: 'bg-emerald-50/95', border: 'border-emerald-200', text: 'text-emerald-950', 
       iconBg: 'bg-emerald-500', icon: <CheckCircle2 className="w-5 h-5 text-white" />,
       title: 'Pesanan Siap!', desc: 'Silakan ambil di kasir'
+    },
+    cancelled: {
+      bg: 'bg-rose-50/95', border: 'border-rose-300', text: 'text-rose-950', 
+      iconBg: 'bg-rose-600', icon: <XCircle className="w-5 h-5 text-white" />,
+      title: 'Pesanan Dibatalkan', desc: 'Hubungi kasir di gerai'
     }
   };
 
@@ -279,6 +325,33 @@ function TicketContent() {
             </div>
           )}
 
+          {/* TOMBOL KONFIRMASI WHATSAPP BISNIS */}
+          <div className="rounded-2xl p-3 sm:p-3.5 bg-emerald-50 border border-emerald-200 shadow-xs flex flex-col gap-2 shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-emerald-900">
+                <MessageCircle className="w-4 h-4 text-emerald-600 fill-emerald-600" />
+                <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider">
+                  WhatsApp Bisnis Gerai
+                </span>
+              </div>
+              <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
+                Self Pick-Up
+              </span>
+            </div>
+
+            <button
+              onClick={handleSendToWhatsApp}
+              className="w-full bg-[#25D366] hover:bg-[#20ba59] active:scale-[0.98] text-white py-2.5 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+            >
+              <MessageCircle className="w-4 h-4 fill-white" />
+              <span>Kirim Bukti Karcis ke WhatsApp</span>
+            </button>
+
+            <p className="text-[9px] text-emerald-700 font-semibold text-center leading-tight">
+              Kirim bukti karcis agar pesanan langsung disiapkan koki selagi Anda menuju gerai
+            </p>
+          </div>
+
           {/* STRUK DETAIL BELANJA */}
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden flex flex-col shrink-0">
             <div className="px-4 py-2 sm:py-2.5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
@@ -306,17 +379,25 @@ function TicketContent() {
                   </div>
                 ))
               ) : null}
+
+              {currentOrder.notes && (
+                <p className="text-[10px] text-slate-500 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
+                  Catatan: "{currentOrder.notes}"
+                </p>
+              )}
             </div>
 
             {/* Total Footer Struk */}
             <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-slate-50/90 border-t border-dashed border-slate-200 flex justify-between items-center">
               <div>
                 <span className={`inline-block border px-2 py-0.5 rounded text-[8px] sm:text-[8.5px] font-black uppercase ${
-                  isUnverified 
-                    ? 'bg-amber-100/90 border-amber-300 text-amber-900' 
-                    : 'bg-emerald-100/60 border-emerald-200 text-emerald-800'
+                  currentOrder.status === 'cancelled'
+                    ? 'bg-rose-100/90 border-rose-300 text-rose-900'
+                    : isUnverified 
+                      ? 'bg-amber-100/90 border-amber-300 text-amber-900' 
+                      : 'bg-emerald-100/60 border-emerald-200 text-emerald-800'
                 }`}>
-                  {isUnverified ? (isCash ? 'BELUM LUNAS' : 'MENUNGGU KASIR') : 'LUNAS'} ({currentOrder.pay})
+                  {currentOrder.status === 'cancelled' ? 'BATAL' : isUnverified ? (isCash ? 'BELUM LUNAS' : 'MENUNGGU KASIR') : 'LUNAS'} ({currentOrder.pay})
                 </span>
               </div>
               <div className="text-right">
@@ -330,7 +411,7 @@ function TicketContent() {
 
           {/* 3. PROMO INSTAGRAM */}
           <a 
-            href="https://instagram.com/takoyakisiboy" 
+            href="https://instagram.com/takoyaki_siboy" 
             target="_blank" 
             rel="noopener noreferrer" 
             className="block bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 rounded-xl p-[1.5px] shadow-xs active:scale-[0.99] transition-transform shrink-0"
@@ -340,7 +421,7 @@ function TicketContent() {
                 <div className="w-5 h-5 bg-white rounded-full flex items-center justify-center text-pink-600 shadow-xs">
                   <InstagramIcon className="w-3 h-3" />
                 </div>
-                <p className="text-[9px] sm:text-[10px] font-black text-white tracking-wider uppercase">Follow @TakoyakiSiboy</p>
+                <p className="text-[9px] sm:text-[10px] font-black text-white tracking-wider uppercase">Follow @takoyaki_siboy</p>
               </div>
               <ChevronRight className="w-4 h-4 text-white/80" />
             </div>

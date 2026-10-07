@@ -13,8 +13,11 @@ const montserrat = Montserrat({
 });
 
 export const metadata = {
-  title: "Cilung Bara - Otentik Gerobak Keliling",
-  description: "Sensasi Cilung Nikmat & Fresh Gerobak Keliling",
+  title: {
+    default: 'Takoyaki Siboy - Takoyaki Kaki 5 Rasa *5',
+    template: '%s | Siboy POS', // Otomatis menambahkan akhiran "| Siboy POS" di sub-halaman
+  },
+  description: 'Pesan Takoyaki autentik lezat dengan aneka pilihan topping premium.',
 };
 
 export default function RootLayout({ children }) {
