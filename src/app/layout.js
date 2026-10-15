@@ -20,6 +20,9 @@ export const metadata = {
   },
   description: 'Pesan Takoyaki autentik lezat dengan aneka pilihan topping premium di Jakarta. Melayani pesan online & self pick-up.',
   keywords: ['Takoyaki Siboy', 'Takoyaki Jakarta', 'Takoyaki SMKN 50', 'Siboy POS'],
+  verification: {
+    google: 'google76eada920606f714',
+  },
   icons: {
     icon: '/logosiboy.png',
     shortcut: '/logosiboy.png',
