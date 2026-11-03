@@ -3,7 +3,15 @@ import { prisma } from '@/lib/prisma';
 
 // Matikan cache statis Next.js agar status selalu live dan real-time
 export const dynamic = 'force-dynamic';
+export const dynamicParams = true;
 export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
+const noCacheHeaders = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'Pragma': 'no-cache',
+  'Expires': '0',
+};
 
 // GET: Membaca status buka/tutup toko langsung dari Supabase
 export async function GET() {
@@ -23,16 +31,14 @@ export async function GET() {
       { success: true, isOpen: Boolean(setting.isOpen) },
       {
         status: 200,
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        },
+        headers: noCacheHeaders,
       }
     );
   } catch (error) {
     console.error('Error GET /api/store-status:', error);
     return NextResponse.json(
       { success: false, error: 'Gagal mengambil status operasional dari database' },
-      { status: 500 }
+      { status: 500, headers: noCacheHeaders }
     );
   }
 }

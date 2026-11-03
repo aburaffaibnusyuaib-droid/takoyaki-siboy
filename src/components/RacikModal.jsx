@@ -68,11 +68,11 @@ const MayoSwirlIcon = ({ className = 'w-4 h-4' }) => (
 );
 
 const DEFAULT_TOPPINGS = [
-  { id: '1', name: 'Katsuobushi', status: 'Aman' },
-  { id: '2', name: 'Keju Mozza', status: 'Aman' },
-  { id: '3', name: 'Sosis Ayam', status: 'Menipis' },
-  { id: '4', name: 'Crabstick', status: 'Aman' },
-  { id: '5', name: 'Kornet Gurih', status: 'Habis' }
+  { id: '1', name: 'Crabstick', status: 'Tersedia' },
+  { id: '2', name: 'Katsuobushi', status: 'Tersedia' },
+  { id: '3', name: 'Keju Mozza', status: 'Tersedia' },
+  { id: '4', name: 'Kornet Gurih', status: 'Tersedia' },
+  { id: '5', name: 'Sosis Ayam', status: 'Tersedia' }
 ];
 
 export default function MenuModal({ product, onClose, onAddToCart, isOpenStore = true }) {
@@ -91,11 +91,12 @@ export default function MenuModal({ product, onClose, onAddToCart, isOpenStore =
 
     const fetchToppings = async () => {
       try {
-        const res = await fetch('/api/toppings', { cache: 'no-store' });
+        const res = await fetch(`/api/toppings?t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
           const json = await res.json();
           if (isMounted && json.success && Array.isArray(json.data) && json.data.length > 0) {
-            setToppingsStock(json.data);
+            const sorted = [...json.data].sort((a, b) => a.name.localeCompare(b.name));
+            setToppingsStock(sorted);
 
             // Bersihkan pilihan jika ada topping yang tiba-tiba berstatus 'Habis'
             const outOfStockNames = json.data

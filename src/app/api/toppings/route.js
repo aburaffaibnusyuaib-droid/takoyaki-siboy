@@ -1,6 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+export const dynamicParams = true;
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
+const noCacheHeaders = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'Pragma': 'no-cache',
+  'Expires': '0',
+};
+
+
 const INITIAL_TOPPINGS = [
   { name: 'Katsuobushi', status: 'Tersedia', color: '#10b981', pct: 100 },
   { name: 'Keju Mozza', status: 'Tersedia', color: '#10b981', pct: 100 },
@@ -13,10 +25,7 @@ const INITIAL_TOPPINGS = [
 export async function GET() {
   try {
     let toppings = await prisma.topping.findMany({
-      orderBy: [
-        { createdAt: 'asc' },
-        { name: 'asc' },
-      ],
+      orderBy: { name: 'asc' },
     });
 
     // Seed otomatis jika tabel Topping di database masih kosong
@@ -25,10 +34,7 @@ export async function GET() {
         data: INITIAL_TOPPINGS,
       });
       toppings = await prisma.topping.findMany({
-        orderBy: [
-          { createdAt: 'asc' },
-          { name: 'asc' },
-        ],
+        orderBy: { name: 'asc' },
       });
     }
 
@@ -43,12 +49,12 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ success: true, data: normalized });
+    return NextResponse.json({ success: true, data: normalized }, { status: 200, headers: noCacheHeaders });
   } catch (error) {
     console.error('Gagal mengambil data topping:', error);
     return NextResponse.json(
-      { success: false, error: 'Gagal mengambil data topping' },
-      { status: 500 }
+      { success: false, data: [], error: error.message },
+      { status: 500, headers: noCacheHeaders }
     );
   }
 }

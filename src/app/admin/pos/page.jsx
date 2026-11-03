@@ -456,11 +456,11 @@ export default function POSPage() {
     { id: 'M3', name: 'Porsi Special', pcs: '15 pcs', price: 17000, desc: 'Porsi puas 15 butir melimpah rame-rame.', badge: 'Porsi Puas', emoji: '🔥' }
   ]);
   const [toppingsStock, setToppingsStock] = useState([
-    { id: 1, name: 'Katsuobushi', status: 'Aman' },
-    { id: 2, name: 'Keju Mozza', status: 'Aman' },
-    { id: 3, name: 'Sosis Ayam', status: 'Menipis' },
-    { id: 4, name: 'Crabstick', status: 'Aman' },
-    { id: 5, name: 'Kornet Gurih', status: 'Habis' }
+    { id: 1, name: 'Crabstick', status: 'Tersedia' },
+    { id: 2, name: 'Katsuobushi', status: 'Tersedia' },
+    { id: 3, name: 'Keju Mozza', status: 'Tersedia' },
+    { id: 4, name: 'Kornet Gurih', status: 'Tersedia' },
+    { id: 5, name: 'Sosis Ayam', status: 'Tersedia' }
   ]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -509,7 +509,17 @@ export default function POSPage() {
 
     syncTodayQueue();
 
-    fetch('/api/menu')
+    fetch(`/api/toppings?t=${Date.now()}`, { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          const sorted = [...json.data].sort((a, b) => a.name.localeCompare(b.name));
+          setToppingsStock(sorted);
+        }
+      })
+      .catch((err) => console.error(err));
+
+    fetch(`/api/menu?t=${Date.now()}`, { cache: 'no-store' })
       .then((res) => res.json())
       .then((json) => {
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {

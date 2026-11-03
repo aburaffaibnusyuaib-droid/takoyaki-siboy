@@ -1,6 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+export const dynamicParams = true;
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
+const noCacheHeaders = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'Pragma': 'no-cache',
+  'Expires': '0',
+};
+
+
 // Helper pembersih angka agar anti-NaN
 const sanitizeNumber = (val) => {
   if (typeof val === 'number') return Math.max(0, Math.round(val));
@@ -26,11 +38,11 @@ export async function GET(request) {
       if (!singleOrder) {
         return NextResponse.json(
           { success: false, message: 'Pesanan tidak ditemukan' },
-          { status: 404 }
+          { status: 404, headers: noCacheHeaders }
         );
       }
 
-      return NextResponse.json({ success: true, data: singleOrder });
+      return NextResponse.json({ success: true, data: singleOrder }, { status: 200, headers: noCacheHeaders });
     }
 
     // 2. Generator Nomor Antrean Harian (Anti-Duplikat meskipun ada baris dihapus)
@@ -71,6 +83,9 @@ export async function GET(request) {
         queueNumber: nextNumber,
         formattedQ,
         generatedOrderId,
+      }, {
+        status: 200,
+        headers: noCacheHeaders,
       });
     }
 
@@ -80,11 +95,11 @@ export async function GET(request) {
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ success: true, data: orders });
+    return NextResponse.json({ success: true, data: orders }, { status: 200, headers: noCacheHeaders });
   } catch (error) {
     return NextResponse.json(
-      { success: false, message: 'Gagal mengambil data pesanan', error: error.message },
-      { status: 500 }
+      { success: false, data: [], error: error.message },
+      { status: 500, headers: noCacheHeaders }
     );
   }
 }

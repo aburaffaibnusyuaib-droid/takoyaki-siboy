@@ -30,7 +30,7 @@ function TicketContent() {
   const fetchOrderLive = async () => {
     if (!targetId) {
       try {
-        const res = await fetch('/api/orders', { cache: 'no-store' });
+        const res = await fetch(`/api/orders?t=${Date.now()}`, { cache: 'no-store' });
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           parseAndSetOrder(json.data[0]);
@@ -46,7 +46,7 @@ function TicketContent() {
     }
 
     try {
-      const res = await fetch(`/api/orders?id=${encodeURIComponent(targetId)}`, { cache: 'no-store' });
+      const res = await fetch(`/api/orders?id=${encodeURIComponent(targetId)}&t=${Date.now()}`, { cache: 'no-store' });
       const json = await res.json();
 
       if (json.success && json.data) {

@@ -27,7 +27,7 @@ export default function OrderHistory() {
   const loadOrdersFromDb = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/orders', { cache: 'no-store' });
+      const res = await fetch(`/api/orders?t=${Date.now()}`, { cache: 'no-store' });
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         const mapped = json.data.map((o) => {

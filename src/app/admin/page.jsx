@@ -12,11 +12,11 @@ import AdminSidebar from '@/components/AdminSidebar';
 
 const INITIAL_PRICES = { kecil: 6000, besar: 12000, special: 17000 };
 const DEFAULT_FALLBACK_TOPPINGS = [
-  { id: '1', name: 'Katsuobushi', status: 'Aman', color: '#10b981', pct: 100 },
-  { id: '2', name: 'Keju Mozza', status: 'Aman', color: '#10b981', pct: 100 },
-  { id: '3', name: 'Sosis Ayam', status: 'Menipis', color: '#f59e0b', pct: 40 },
-  { id: '4', name: 'Crabstick', status: 'Aman', color: '#10b981', pct: 100 },
-  { id: '5', name: 'Kornet Gurih', status: 'Habis', color: '#ef4444', pct: 0 }
+  { id: '1', name: 'Crabstick', status: 'Tersedia', color: '#10b981', pct: 100 },
+  { id: '2', name: 'Katsuobushi', status: 'Tersedia', color: '#10b981', pct: 100 },
+  { id: '3', name: 'Keju Mozza', status: 'Tersedia', color: '#10b981', pct: 100 },
+  { id: '4', name: 'Kornet Gurih', status: 'Tersedia', color: '#10b981', pct: 100 },
+  { id: '5', name: 'Sosis Ayam', status: 'Tersedia', color: '#10b981', pct: 100 }
 ];
 
 export default function AdminDashboard() {
@@ -51,7 +51,7 @@ export default function AdminDashboard() {
   const fetchDbData = async () => {
     try {
       // 1. Ambil Transaksi Masuk
-      const resOrders = await fetch('/api/orders', { cache: 'no-store' });
+      const resOrders = await fetch(`/api/orders?t=${Date.now()}`, { cache: 'no-store' });
       const jsonOrders = await resOrders.json();
       if (jsonOrders.success && Array.isArray(jsonOrders.data)) {
         const mapped = jsonOrders.data.map(o => {
@@ -83,7 +83,7 @@ export default function AdminDashboard() {
       }
 
       // 2. Ambil Daftar Menu & Harga Terkini
-      const resMenu = await fetch('/api/menu', { cache: 'no-store' });
+      const resMenu = await fetch(`/api/menu?t=${Date.now()}`, { cache: 'no-store' });
       const jsonMenu = await resMenu.json();
       if (jsonMenu.success && Array.isArray(jsonMenu.data) && jsonMenu.data.length > 0) {
         const newPrices = { ...INITIAL_PRICES };
@@ -96,17 +96,18 @@ export default function AdminDashboard() {
       }
 
       // 3. Ambil Status Buka / Tutup Toko dari Supabase
-      const resStatus = await fetch('/api/store-status', { cache: 'no-store' });
+      const resStatus = await fetch(`/api/store-status?t=${Date.now()}`, { cache: 'no-store' });
       const jsonStatus = await resStatus.json();
       if (typeof jsonStatus.isOpen === 'boolean') {
         setIsOpen(jsonStatus.isOpen);
       }
 
       // 4. Ambil Seluruh Daftar Topping Real-Time dari Supabase
-      const resToppings = await fetch('/api/toppings', { cache: 'no-store' });
+      const resToppings = await fetch(`/api/toppings?t=${Date.now()}`, { cache: 'no-store' });
       const jsonToppings = await resToppings.json();
       if (jsonToppings.success && Array.isArray(jsonToppings.data) && jsonToppings.data.length > 0) {
-        setToppings(jsonToppings.data);
+        const sorted = [...jsonToppings.data].sort((a, b) => a.name.localeCompare(b.name));
+        setToppings(sorted);
       }
 
     } catch (e) {

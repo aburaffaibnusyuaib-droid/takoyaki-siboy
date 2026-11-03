@@ -105,7 +105,7 @@ export default function KitchenView() {
   // Mengambil data dari Supabase via API
   const loadOrders = async () => {
     try {
-      const res = await fetch('/api/orders', { cache: 'no-store' });
+      const res = await fetch(`/api/orders?t=${Date.now()}`, { cache: 'no-store' });
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         const formatted = formatDbToKitchen(json.data);

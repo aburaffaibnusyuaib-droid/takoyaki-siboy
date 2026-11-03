@@ -12,7 +12,7 @@ export default function Menu({ onSelectPackage, isOpenStore = true }) {
   // Ambil data harga riil dari Supabase via API
   const fetchMenuFromDb = async () => {
     try {
-      const res = await fetch('/api/menu', { cache: 'no-store' });
+      const res = await fetch(`/api/menu?t=${Date.now()}`, { cache: 'no-store' });
       const json = await res.json();
       if (json.success && Array.isArray(json.data) && json.data.length > 0) {
         const updated = { ...DEFAULT_PRICES };
