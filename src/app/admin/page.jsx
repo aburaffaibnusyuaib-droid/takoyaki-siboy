@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   DollarSign, ShoppingBag, Clock, TrendingUp, ArrowUpRight,
-  Settings2, X, Plus, Trash2, RefreshCw, Calendar, RotateCcw,
+  Settings2, Tag, X, Plus, Trash2, RefreshCw, Calendar, RotateCcw,
   AlertTriangle
 } from 'lucide-react';
 
@@ -38,6 +38,8 @@ export default function AdminDashboard() {
 
   // STATE DATA HARGA, TOPPING & STATISTIK REAL-TIME
   const [prices, setPrices] = useState(INITIAL_PRICES);
+  const [isSavingPrices, setIsSavingPrices] = useState(false);
+  const [priceToast, setPriceToast] = useState('');
   const [toppings, setToppings] = useState(DEFAULT_FALLBACK_TOPPINGS);
   const [newToppingName, setNewToppingName] = useState('');
   const [toppingError, setToppingError] = useState('');
@@ -307,61 +309,98 @@ export default function AdminDashboard() {
     cumulativeOffset -= pct;
   });
 
-  // UPDATE HARGA MENU KE SUPABASE
-  const handlePriceChange = async (key, value) => {
-    const val = parseInt(value, 10) || 0;
-    const updated = { ...prices, [key]: val };
-    setPrices(updated);
+// UPDATE HARGA MENU KE SUPABASE
+  const handlePriceInputChange = (key, value) => {
+    const val = parseInt(value, 10);
+    setPrices((prev) => ({ ...prev, [key]: isNaN(val) ? 0 : val }));
+  };
 
+  const handleSavePrices = async () => {
+    setIsSavingPrices(true);
+    setPriceToast('');
     try {
-      await fetch('/api/menu', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: key, price: val }),
-      });
+      const results = await Promise.all([
+        fetch('/api/menu', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug: 'kecil', price: prices.kecil }),
+        }),
+        fetch('/api/menu', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug: 'besar', price: prices.besar }),
+        }),
+        fetch('/api/menu', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug: 'special', price: prices.special }),
+        }),
+      ]);
+
+      const allOk = results.every((res) => res.ok);
+      if (!allOk) throw new Error('Sebagian harga gagal disimpan ke database');
+
+      setPriceToast('Harga menu berhasil diperbarui!');
+      setTimeout(() => setPriceToast(''), 3000);
+      fetchDbData();
     } catch (err) {
-      console.error('Gagal update harga ke Supabase:', err);
+      console.error('Gagal simpan harga:', err);
+      alert('Gagal memperbarui harga menu ke Supabase.');
+    } finally {
+      setIsSavingPrices(false);
     }
   };
 
-  // UPDATE STATUS TOPPING KE SUPABASE
+  // UPDATE STATUS TOPPING KE SUPABASE (2-STATE: TERSEDIA <-> HABIS)
   const cycleToppingStatus = async (id) => {
-    const target = toppings.find(t => t.id === id);
+    const target = toppings.find((t) => t.id === id);
     if (!target) return;
 
-    let nextStatus = 'Aman';
-    let nextColor = '#10b981';
-    let nextPct = 100;
+    // Hanya 2 kondisi: Jika Tersedia/Aman -> ubah ke Habis. Jika Habis -> ubah ke Tersedia.
+    const isCurrentlyAvailable = target.status === 'Tersedia' || target.status === 'Aman';
+    const nextStatus = isCurrentlyAvailable ? 'Habis' : 'Tersedia';
+    const nextColor = isCurrentlyAvailable ? '#ef4444' : '#10b981';
+    const nextPct = isCurrentlyAvailable ? 0 : 100;
 
-    if (target.status === 'Aman') {
-      nextStatus = 'Menipis';
-      nextColor = '#f59e0b';
-      nextPct = 40;
-    } else if (target.status === 'Menipis') {
-      nextStatus = 'Habis';
-      nextColor = '#ef4444';
-      nextPct = 0;
-    }
-
-    const updated = toppings.map(t => 
+    const previousToppings = [...toppings];
+    const updated = toppings.map((t) =>
       t.id === id ? { ...t, status: nextStatus, color: nextColor, pct: nextPct } : t
     );
+
+    isUpdatingToppingRef.current = true;
     setToppings(updated);
 
     try {
-      await fetch('/api/toppings', {
+      const res = await fetch('/api/toppings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id,
+          name: target.name,
           status: nextStatus,
           color: nextColor,
-          pct: nextPct
+          pct: nextPct,
         }),
       });
+
+      const resJson = await res.json();
+      if (!res.ok || !resJson.success) {
+        throw new Error(resJson.error || 'Gagal update database');
+      }
+
+      if (resJson.data) {
+        setToppings((prev) =>
+          prev.map((t) => (t.id === id || t.name === target.name ? resJson.data : t))
+        );
+      }
     } catch (err) {
       console.error('Gagal update topping ke database:', err);
-      fetchDbData();
+      setToppings(previousToppings);
+      alert('Gagal memperbarui status topping ke database.');
+    } finally {
+      setTimeout(() => {
+        isUpdatingToppingRef.current = false;
+      }, 1000);
     }
   };
 
@@ -455,8 +494,18 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap">
             
+            {/* Tombol Atur Harga Menu */}
+            <button 
+              type="button" 
+              onClick={() => setIsDrawerOpen(true)}
+              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 shadow-sm transition-all cursor-pointer active:scale-95"
+            >
+              <Tag className="w-4 h-4 text-slate-500" />
+              <span>Atur Harga Menu</span>
+            </button>
+
             {/* Filter Kalender & Periode */}
             <div className="relative">
               <button 
@@ -688,44 +737,30 @@ export default function AdminDashboard() {
 
         {/* STATUS BAHAN TOPPING */}
         <div className="bg-white rounded-3xl border-2 border-slate-100 p-5 sm:p-6 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-4 border-b border-slate-100">
-            <div>
-              <h3 className="text-sm font-black uppercase tracking-wider text-slate-800" style={{ fontFamily: "'Montserrat', sans-serif" }}>Ketersediaan Topping</h3>
-              <p className="text-[11px] font-bold text-slate-400 mt-0.5">Klik kartu untuk ubah status instan (Aman, Menipis, Habis). Langsung sinkron ke HP pembeli.</p>
-            </div>
-            <button 
-              type="button" 
-              onClick={() => setIsDrawerOpen(true)} 
-              className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-700 bg-white hover:bg-slate-50 px-4 py-2.5 rounded-xl border-2 border-slate-200 transition-all cursor-pointer shadow-sm active:scale-95"
-            >
-              <Settings2 className="w-4 h-4 text-slate-500" /> Atur Harga & Bahan
-            </button>
+          <div className="pb-4 mb-4 border-b border-slate-100">
+            <h3 className="text-sm font-black uppercase tracking-wider text-slate-800" style={{ fontFamily: "'Montserrat', sans-serif" }}>Ketersediaan Topping</h3>
+            <p className="text-[11px] font-bold text-slate-400 mt-0.5">Monitoring ketersediaan 5 bahan utama gerai secara langsung.</p>
           </div>
           
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
             {toppings.map((top) => (
               <div 
                 key={top.id} 
-                onClick={() => cycleToppingStatus(top.id)}
-                className={`border-2 rounded-2xl p-4 transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 select-none ${
-                  top.status === 'Aman' ? 'bg-white border-slate-100 hover:border-emerald-300 hover:shadow-md' :
-                  top.status === 'Menipis' ? 'bg-amber-50/50 border-amber-200 hover:border-amber-300' :
+                className={`border-2 rounded-2xl p-4 transition-all duration-200 flex flex-col justify-between gap-3 select-none ${
+                  top.status === 'Tersedia' || top.status === 'Aman' ? 'bg-white border-slate-100 shadow-2xs' :
                   'bg-slate-50 border-slate-200 opacity-60'
                 }`}
-                title="Klik untuk ubah status bahan"
               >
                 <div className="flex items-center justify-between">
                   <span className={`text-xs font-black truncate ${top.status === 'Habis' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{top.name}</span>
-                  <RefreshCw className="w-3 h-3 text-slate-300" />
                 </div>
                 
                 <div className="flex items-center justify-between">
                   <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${
-                    top.status === 'Aman' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                    top.status === 'Menipis' ? 'bg-amber-100 text-amber-800 border-amber-300 animate-pulse' :
+                    top.status === 'Tersedia' || top.status === 'Aman' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                     'bg-slate-200 text-slate-600 border-slate-300'
                   }`}>
-                    {top.status}
+                    {top.status === 'Aman' ? 'Tersedia' : top.status}
                   </span>
                   <span className="w-3 h-3 rounded-full" style={{ backgroundColor: top.color }}></span>
                 </div>
@@ -736,14 +771,14 @@ export default function AdminDashboard() {
 
       </div>
 
-      {/* DRAWER PENGATURAN HARGA, BAHAN, & ZONA DESTRUKTIF */}
-      {isDrawerOpen && <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40 transition-opacity" onClick={() => setIsDrawerOpen(false)} />}
+      {/* DRAWER PENGATURAN HARGA MENU & ZONA DESTRUKTIF */}
+      {isDrawerOpen && <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40 transition-opacity cursor-pointer" onClick={() => setIsDrawerOpen(false)} />}
       <div className={`fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out border-l border-slate-200 flex flex-col ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         
         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div>
-            <h2 className="text-lg font-black uppercase tracking-tight text-slate-800" style={{ fontFamily: "'Montserrat', sans-serif" }}>Pengaturan Menu & Stok</h2>
-            <p className="text-xs font-bold text-slate-400 mt-0.5">Ubah harga jual & status persediaan bahan langsung ke Supabase.</p>
+            <h2 className="text-lg font-black uppercase tracking-tight text-slate-800" style={{ fontFamily: "'Montserrat', sans-serif" }}>PENGATURAN HARGA MENU</h2>
+            <p className="text-xs font-bold text-slate-400 mt-0.5">Sesuaikan harga jual porsi secara langsung ke database Supabase.</p>
           </div>
           <button type="button" onClick={() => setIsDrawerOpen(false)} className="w-9 h-9 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 cursor-pointer shadow-sm">
             <X className="w-4 h-4" />
@@ -753,7 +788,7 @@ export default function AdminDashboard() {
         <div className="flex-1 overflow-y-auto p-6 space-y-8 [&::-webkit-scrollbar]:hidden">
           
           {/* BAGIAN HARGA MENU */}
-          <section className="space-y-3">
+          <section className="space-y-4">
             <div className="border-b border-slate-100 pb-2">
               <h3 className="text-xs font-black uppercase tracking-widest text-slate-800">Ubah Harga Menu</h3>
               <p className="text-[10px] font-bold text-slate-400">Tersinkron langsung ke Supabase & Layar Kasir POS</p>
@@ -767,7 +802,12 @@ export default function AdminDashboard() {
                 </div>
                 <div className="relative w-28">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">Rp</span>
-                  <input type="number" value={prices.kecil} onChange={(e) => handlePriceChange('kecil', e.target.value)} className="w-full bg-white border border-slate-200 text-xs font-black text-right pr-3 pl-7 py-2 rounded-xl outline-none focus:border-red-500" />
+                  <input 
+                    type="number" 
+                    value={prices.kecil} 
+                    onChange={(e) => handlePriceInputChange('kecil', e.target.value)} 
+                    className="w-full bg-white border border-slate-200 text-xs font-black text-right pr-3 pl-7 py-2 rounded-xl outline-none focus:border-red-500" 
+                  />
                 </div>
               </div>
 
@@ -778,7 +818,12 @@ export default function AdminDashboard() {
                 </div>
                 <div className="relative w-28">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">Rp</span>
-                  <input type="number" value={prices.besar} onChange={(e) => handlePriceChange('besar', e.target.value)} className="w-full bg-white border border-slate-200 text-xs font-black text-right pr-3 pl-7 py-2 rounded-xl outline-none focus:border-red-500" />
+                  <input 
+                    type="number" 
+                    value={prices.besar} 
+                    onChange={(e) => handlePriceInputChange('besar', e.target.value)} 
+                    className="w-full bg-white border border-slate-200 text-xs font-black text-right pr-3 pl-7 py-2 rounded-xl outline-none focus:border-red-500" 
+                  />
                 </div>
               </div>
 
@@ -789,51 +834,36 @@ export default function AdminDashboard() {
                 </div>
                 <div className="relative w-28">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">Rp</span>
-                  <input type="number" value={prices.special} onChange={(e) => handlePriceChange('special', e.target.value)} className="w-full bg-white border border-slate-200 text-xs font-black text-right pr-3 pl-7 py-2 rounded-xl outline-none focus:border-red-500" />
+                  <input 
+                    type="number" 
+                    value={prices.special} 
+                    onChange={(e) => handlePriceInputChange('special', e.target.value)} 
+                    className="w-full bg-white border border-slate-200 text-xs font-black text-right pr-3 pl-7 py-2 rounded-xl outline-none focus:border-red-500" 
+                  />
                 </div>
               </div>
-            </div>
-          </section>
 
-          {/* BAGIAN TAMBAH & KELOLA BAHAN TOPPING */}
-          <section className="space-y-4">
-            <div className="border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-black uppercase tracking-widest text-slate-800">Kelola Bahan Topping</h3>
-              <p className="text-[10px] font-bold text-slate-400">Bahan &apos;Habis&apos; otomatis terkunci dan tidak bisa dipilih pembeli</p>
-            </div>
-
-            <div className="flex gap-2">
-              <input 
-                type="text" 
-                placeholder="Ketik topping baru..." 
-                value={newToppingName} 
-                onChange={(e) => setNewToppingName(e.target.value)} 
-                className="flex-1 text-xs font-bold px-3 py-2.5 rounded-xl border border-slate-200 outline-none focus:border-red-500 bg-slate-50" 
-              />
-              <button 
-                type="button" 
-                onClick={handleAddTopping} 
-                className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-            {toppingError && <p className="text-[10px] text-red-500 font-bold">{toppingError}</p>}
-
-            <div className="space-y-2.5">
-              {toppings.map((top) => (
-                <div key={top.id} className="bg-white border-2 border-slate-100 rounded-2xl p-3 flex items-center justify-between hover:border-slate-200">
-                  <div>
-                    <h4 className={`text-xs font-black ${top.status === 'Habis' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{top.name}</h4>
-                    <span className="text-[9px] text-slate-400 font-bold">Status Bahan</span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => cycleToppingStatus(top.id)} className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${top.status === 'Aman' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : top.status === 'Menipis' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>{top.status}</button>
-                    <button type="button" onClick={() => handleDeleteTopping(top.id)} className="w-7 h-7 rounded-lg text-slate-300 hover:text-red-500 flex items-center justify-center transition-colors cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
+              {priceToast && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                  <p className="text-xs font-bold text-emerald-700">{priceToast}</p>
                 </div>
-              ))}
+              )}
+
+              <button
+                type="button"
+                disabled={isSavingPrices}
+                onClick={handleSavePrices}
+                className="w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+              >
+                {isSavingPrices ? (
+                  <>
+                    <RotateCcw className="w-4 h-4 animate-spin" />
+                    <span>Menyimpan Harga...</span>
+                  </>
+                ) : (
+                  <span>Simpan Perubahan Harga</span>
+                )}
+              </button>
             </div>
           </section>
 

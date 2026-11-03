@@ -140,7 +140,7 @@ function MenuModal({ product, editingItem, toppingsStock, onClose, onSave }) {
             </div>
             <div className="grid grid-cols-2 gap-2">
               {toppingsStock.map((topping) => {
-                const isHabis = topping.status === 'Habis';
+                const isHabis = topping.status === 'Habis' || topping.pct === 0;
                 const isSelected = selectedToppings.includes(topping.name);
                 const icon = TOPPING_ICON_MAP[topping.name] || <Flame className="w-4 h-4 text-amber-500" />;
 

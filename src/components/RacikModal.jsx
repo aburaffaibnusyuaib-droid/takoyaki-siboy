@@ -288,7 +288,7 @@ export default function MenuModal({ product, onClose, onAddToCart, isOpenStore =
 
             <div className="grid grid-cols-2 gap-2.5">
               {toppingsStock.map((topping) => {
-                const isHabis = topping.status === 'Habis';
+                const isHabis = topping.status === 'Habis' || topping.pct === 0 || topping.color === '#ef4444';
                 const isSelected = selectedToppings.includes(topping.name);
 
                 return (

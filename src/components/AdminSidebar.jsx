@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
   X, Store, LayoutDashboard, ChefHat, ClipboardList, 
-  Settings2, LogOut, Ticket 
+  Settings2, Tag, LogOut, Ticket 
 } from 'lucide-react';
 
 export default function AdminSidebar({ isOpen, setIsOpen, onOpenSettings }) {
@@ -228,7 +228,7 @@ export default function AdminSidebar({ isOpen, setIsOpen, onOpenSettings }) {
               onClick={() => { setIsOpen(false); onOpenSettings(); }} 
               className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:border-slate-300 hover:text-slate-900 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm cursor-pointer hover:-translate-y-0.5"
             >
-              <Settings2 className="w-4 h-4" /> Atur Stok Topping
+              <Tag className="w-4 h-4" /> Atur Harga Menu
             </button>
           )}
           <button 
