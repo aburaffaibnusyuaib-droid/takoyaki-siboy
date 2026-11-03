@@ -51,7 +51,7 @@ export default function Home() {
     fetchStoreStatus();
 
     // Cek berkala tiap 10 detik dan saat tab browser aktif kembali
-    const interval = setInterval(fetchStoreStatus, 10000);
+    const interval = setInterval(fetchStoreStatus, 4000);
     window.addEventListener('focus', fetchStoreStatus);
 
     return () => {
@@ -148,7 +148,7 @@ export default function Home() {
       const finalNotes = `[${qNo}] ${customerNotes}Self-Order Web | Metode: ${orderMeta.paymentMethod}`;
 
       // 2. Simpan ke Supabase via POST /api/orders
-      await fetch('/api/orders', {
+      const orderRes = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -161,6 +161,16 @@ export default function Home() {
           items: formattedDbItems,
         }),
       });
+
+      if (!orderRes.ok) {
+        const errJson = await orderRes.json().catch(() => ({}));
+        throw new Error(errJson.message || 'Gagal mengirim pesanan ke server, silakan coba lagi');
+      }
+
+      const orderJson = await orderRes.json();
+      if (!orderJson.success) {
+        throw new Error(orderJson.message || 'Gagal mengirim pesanan ke server, silakan coba lagi');
+      }
 
       // 3. Cadangan sinkronisasi lokal
       const now = new Date();
@@ -208,7 +218,7 @@ export default function Home() {
       router.push(`/ticket?id=${orderId}`);
     } catch (error) {
       console.error('Checkout error:', error);
-      alert('Terjadi kesalahan saat memproses pesanan. Silakan coba lagi.');
+      alert(error.message || 'Terjadi kesalahan saat memproses pesanan. Silakan coba lagi.');
       setIsSubmitting(false);
     }
   };
@@ -243,7 +253,7 @@ export default function Home() {
       {/* Modal Racik Menu */}
       {isModalOpen && selectedProduct && (
         <RacikModal 
-          key={editingIndex !== null ? `edit-${editingIndex}` : `new-${selectedProduct.id || Date.now()}`}
+          key={editingIndex !== null ? `edit-${editingIndex}` : `new-${selectedProduct.id || 'product'}`}
           product={selectedProduct} 
           isEditMode={editingIndex !== null}
           isOpenStore={isOpen}

@@ -190,7 +190,7 @@ export default function AboutUs() {
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 text-left">
               <Quote className="w-3.5 h-3.5 text-red-500 mb-1 opacity-70" />
               <p className="text-[11px] font-semibold text-slate-700 italic leading-snug">
-                "Jualan makanan buat kami sederhana: rasa harus konsisten, takaran jujur, dan pembeli nggak boleh ngerasa rugi."
+                &quot;Jualan makanan buat kami sederhana: rasa harus konsisten, takaran jujur, dan pembeli nggak boleh ngerasa rugi.&quot;
               </p>
             </div>
           </div>
@@ -242,7 +242,7 @@ export default function AboutUs() {
             <div className="space-y-2">
               <div className="flex items-center justify-between pl-12">
                 <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">
-                  Panggilan "Si Boy"
+                  Panggilan &quot;Si Boy&quot;
                 </span>
 
                 <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200/90 flex items-center justify-center p-1 shadow-2xs shrink-0 overflow-hidden">
@@ -265,7 +265,7 @@ export default function AboutUs() {
               </h4>
 
               <p className="text-xs font-medium text-slate-600 leading-relaxed">
-                Nama "Siboy" diambil dari panggilan hangat kepada putra pertama mereka saat masih tinggal di Tambun. Tawa si kecil menjadi penguat di kala letih, sekaligus tumpuan doa agar usaha ini terus membawa berkah masa depan.
+                Nama &quot;Siboy&quot; diambil dari panggilan hangat kepada putra pertama mereka saat masih tinggal di Tambun. Tawa si kecil menjadi penguat di kala letih, sekaligus tumpuan doa agar usaha ini terus membawa berkah masa depan.
               </p>
             </div>
 

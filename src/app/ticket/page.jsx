@@ -382,7 +382,7 @@ Mohon dicek dan diproses ya kak. Terima kasih!`;
 
               {currentOrder.notes && (
                 <p className="text-[10px] text-slate-500 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
-                  Catatan: "{currentOrder.notes}"
+                  Catatan: &quot;{currentOrder.notes}&quot;
                 </p>
               )}
             </div>

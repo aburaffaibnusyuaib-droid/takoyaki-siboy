@@ -463,7 +463,7 @@ export default function OrderHistory() {
                   ))}
                   {selectedOrder.notes && (
                     <p className="text-[10px] text-slate-500 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
-                      Catatan: "{selectedOrder.notes}"
+                      Catatan: &quot;{selectedOrder.notes}&quot;
                     </p>
                   )}
                 </div>

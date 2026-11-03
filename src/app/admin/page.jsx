@@ -799,7 +799,7 @@ export default function AdminDashboard() {
           <section className="space-y-4">
             <div className="border-b border-slate-100 pb-2">
               <h3 className="text-xs font-black uppercase tracking-widest text-slate-800">Kelola Bahan Topping</h3>
-              <p className="text-[10px] font-bold text-slate-400">Bahan 'Habis' otomatis terkunci dan tidak bisa dipilih pembeli</p>
+              <p className="text-[10px] font-bold text-slate-400">Bahan &apos;Habis&apos; otomatis terkunci dan tidak bisa dipilih pembeli</p>
             </div>
 
             <div className="flex gap-2">

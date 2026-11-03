@@ -76,15 +76,13 @@ const DEFAULT_TOPPINGS = [
 ];
 
 export default function MenuModal({ product, onClose, onAddToCart, isOpenStore = true }) {
-  if (!product) return null;
-
-  const [quantity, setQuantity] = useState(product.quantity || 1);
-  const [selectedToppings, setSelectedToppings] = useState(product.toppings || []);
+  const [quantity, setQuantity] = useState(product?.quantity || 1);
+  const [selectedToppings, setSelectedToppings] = useState(product?.toppings || []);
   const [pakaiSayur, setPakaiSayur] = useState(
-    product.sayur !== undefined ? !product.sayur.includes('Tanpa') : true
+    product?.sayur !== undefined ? !product.sayur.includes('Tanpa') : true
   );
-  const [selectedSaus, setSelectedSaus] = useState(product.saus || ['pedas', 'mayones']);
-  const [catatan, setCatatan] = useState(product.catatan || '');
+  const [selectedSaus, setSelectedSaus] = useState(product?.saus || ['pedas', 'mayones']);
+  const [catatan, setCatatan] = useState(product?.catatan || '');
   const [toppingsStock, setToppingsStock] = useState(DEFAULT_TOPPINGS);
 
   // 1. SINKRONISASI STOK TOPPING LIVE DARI SUPABASE
@@ -129,6 +127,8 @@ export default function MenuModal({ product, onClose, onAddToCart, isOpenStore =
       setCatatan(product.catatan || '');
     }
   }, [product]);
+
+  if (!product) return null;
 
   const unitPrice = product.numericPrice || product.unitPrice || 6000;
   const totalPrice = unitPrice * quantity;

@@ -341,7 +341,7 @@ export default function KitchenView() {
 
                     {order.notes && (
                       <p className="text-[10px] text-amber-900 italic bg-amber-50 p-2 rounded-lg border border-amber-200">
-                        Catatan: "{order.notes}"
+                        Catatan: &quot;{order.notes}&quot;
                       </p>
                     )}
                   </div>

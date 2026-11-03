@@ -19,11 +19,11 @@ export default function Cart({
   onCheckoutCash = () => {},
   onCheckoutQris = () => {}
 }) {
-  if (!isOpen) return null;
-
   const [nama, setNama] = useState('');
   const [catatanGlobal, setCatatanGlobal] = useState('');
   const [errorNama, setErrorNama] = useState(false);
+
+  if (!isOpen) return null;
 
   const subtotal = cartItems.reduce((acc, item) => acc + (item.totalPrice || 0), 0);
 
@@ -255,7 +255,7 @@ export default function Cart({
 
                   {item.catatan && (
                     <p className="text-[11px] text-slate-600 italic bg-slate-50 p-2 rounded-xl border border-slate-100 font-serif">
-                      "{item.catatan}"
+                      &quot;{item.catatan}&quot;
                     </p>
                   )}
 

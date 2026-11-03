@@ -43,9 +43,7 @@ const TOPPING_ICON_MAP = {
 
 /* ================= MODAL RACIK & EDIT PESANAN ================= */
 function MenuModal({ product, editingItem, toppingsStock, onClose, onSave }) {
-  if (!product && !editingItem) return null;
-
-  const currentData = editingItem || product;
+  const currentData = editingItem || product || {};
 
   const [quantity, setQuantity] = useState(editingItem ? editingItem.qty : 1);
   const [selectedToppings, setSelectedToppings] = useState(
@@ -63,6 +61,8 @@ function MenuModal({ product, editingItem, toppingsStock, onClose, onSave }) {
   const [catatan, setCatatan] = useState(
     editingItem?.customs?.note || ''
   );
+
+  if (!product && !editingItem) return null;
 
   const unitPrice = currentData.price || 6000;
   const totalPrice = unitPrice * quantity;
@@ -283,6 +283,160 @@ function MenuModal({ product, editingItem, toppingsStock, onClose, onSave }) {
           >
             <span>{editingItem ? 'SIMPAN PERUBAHAN' : 'TAMBAH PESANAN'}</span>
             <span className="bg-white/20 px-2 py-0.5 rounded-md text-[11px]">Rp {totalPrice.toLocaleString('id-ID')}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ================= KOMPONEN KONTEN KERANJANG ================= */
+function CartInnerContent({
+  isMobile = false,
+  queueDisplay,
+  displayCustomer,
+  orderType,
+  cart,
+  setCart,
+  setIsMobileCartOpen,
+  handleOpenEdit,
+  removeFromCart,
+  updateQty,
+  totalAkhir,
+  initPayment,
+  formatSaus,
+}) {
+  return (
+    <div className="w-full h-full bg-white flex flex-col overflow-hidden">
+      <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+          <div className="w-8 h-8 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center shadow-xs shrink-0">
+            <ShoppingCart className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 leading-none">Rincian Menu</h3>
+              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 bg-amber-50 text-amber-900 border border-amber-200 rounded truncate max-w-[140px]">
+                {queueDisplay} • {displayCustomer}
+              </span>
+            </div>
+            <p className="text-[9.5px] font-bold text-slate-400 mt-1 uppercase tracking-wide">
+              {orderType} • {cart.length} Menu Terpilih
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {cart.length > 0 && (
+            <button 
+              type="button" 
+              onClick={() => setCart([])}
+              className="text-[10px] font-black uppercase text-slate-400 hover:text-red-600 px-2 py-1 rounded transition-colors cursor-pointer"
+            >
+              Hapus
+            </button>
+          )}
+          {isMobile && (
+            <button 
+              type="button" 
+              onClick={() => setIsMobileCartOpen(false)} 
+              className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center active:scale-90 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-2.5 bg-white [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        {cart.length === 0 ? (
+          <div className="h-full py-16 flex flex-col items-center justify-center text-slate-300 gap-2">
+            <ShoppingCart className="w-12 h-12 stroke-[1]" />
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Keranjang Kosong</p>
+          </div>
+        ) : (
+          cart.map((item) => (
+            <div key={item.cartId} className="bg-white border-2 border-slate-100 rounded-2xl p-3 shadow-xs space-y-2">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">{item.name}</h4>
+                  <span className="text-xs font-black text-red-600">Rp {(item.price * item.qty).toLocaleString('id-ID')}</span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEdit(item)}
+                    className="flex items-center gap-1 text-[9px] font-black uppercase px-2 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors cursor-pointer"
+                    title="Edit Topping & Saus"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    <span>Edit</span>
+                  </button>
+
+                  <button 
+                    type="button" 
+                    onClick={() => removeFromCart(item.cartId)} 
+                    className="w-7 h-7 rounded-lg bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-1">
+                <span className="inline-flex text-[8px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
+                  ✨ {item.customs.toppings.join(', ')}
+                </span>
+                <span className="inline-flex text-[8px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
+                  🥬 {item.customs.veg}
+                </span>
+                {item.customs.sauce[0] !== 'Tanpa Saus' && (
+                  <span className="inline-flex text-[8px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded">
+                    🔥 {formatSaus(item.customs.sauce, item.customs.spicyLevel)}
+                  </span>
+                )}
+              </div>
+
+              {item.customs.note && (
+                <p className="text-[10px] text-slate-500 italic bg-slate-50 p-1.5 rounded border border-slate-100">
+                  &quot;{item.customs.note}&quot;
+                </p>
+              )}
+
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                <span className="text-[9px] font-black uppercase text-slate-400">Porsi:</span>
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+                  <button type="button" onClick={() => updateQty(item.cartId, -1)} className="w-6 h-6 bg-white rounded flex items-center justify-center text-slate-600 shadow-xs cursor-pointer"><Minus className="w-3 h-3" /></button>
+                  <span className="text-xs font-black w-4 text-center">{item.qty}</span>
+                  <button type="button" onClick={() => updateQty(item.cartId, 1)} className="w-6 h-6 bg-red-600 text-white rounded flex items-center justify-center shadow-xs cursor-pointer"><Plus className="w-3 h-3" /></button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="p-4 bg-white border-t border-slate-100 shrink-0 shadow-xs">
+        <div className="flex justify-between items-end mb-3">
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Tagihan:</span>
+          <span className="text-2xl font-black text-red-600 tracking-tight leading-none">Rp {totalAkhir.toLocaleString('id-ID')}</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button 
+            type="button" 
+            onClick={() => initPayment('cash')} 
+            className="flex items-center justify-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-2 border-emerald-200 text-xs font-black uppercase tracking-wider py-3 rounded-xl transition-all cursor-pointer"
+          >
+            <Banknote className="w-4 h-4" /> Bayar Tunai
+          </button>
+          <button 
+            type="button" 
+            onClick={() => initPayment('qris')} 
+            className="flex items-center justify-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white border-2 border-sky-500 shadow-xs text-xs font-black uppercase tracking-wider py-3 rounded-xl transition-all cursor-pointer"
+          >
+            <ScanLine className="w-4 h-4" /> Via QRIS
           </button>
         </div>
       </div>
@@ -546,142 +700,21 @@ export default function POSPage() {
 
   const displayCustomer = customerName.trim() || `Pelanggan ${queueDisplay}`;
 
-  const CartInnerContent = ({ isMobile = false }) => (
-    <div className="w-full h-full bg-white flex flex-col overflow-hidden">
-      <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0 pr-2">
-          <div className="w-8 h-8 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center shadow-xs shrink-0">
-            <ShoppingCart className="w-4 h-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 leading-none">Rincian Menu</h3>
-              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 bg-amber-50 text-amber-900 border border-amber-200 rounded truncate max-w-[140px]">
-                {queueDisplay} • {displayCustomer}
-              </span>
-            </div>
-            <p className="text-[9.5px] font-bold text-slate-400 mt-1 uppercase tracking-wide">
-              {orderType} • {cart.length} Menu Terpilih
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          {cart.length > 0 && (
-            <button 
-              type="button" 
-              onClick={() => setCart([])}
-              className="text-[10px] font-black uppercase text-slate-400 hover:text-red-600 px-2 py-1 rounded transition-colors cursor-pointer"
-            >
-              Hapus
-            </button>
-          )}
-          {isMobile && (
-            <button 
-              type="button" 
-              onClick={() => setIsMobileCartOpen(false)} 
-              className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center active:scale-90 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-2.5 bg-white [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        {cart.length === 0 ? (
-          <div className="h-full py-16 flex flex-col items-center justify-center text-slate-300 gap-2">
-            <ShoppingCart className="w-12 h-12 stroke-[1]" />
-            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Keranjang Kosong</p>
-          </div>
-        ) : (
-          cart.map((item) => (
-            <div key={item.cartId} className="bg-white border-2 border-slate-100 rounded-2xl p-3 shadow-xs space-y-2">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">{item.name}</h4>
-                  <span className="text-xs font-black text-red-600">Rp {(item.price * item.qty).toLocaleString('id-ID')}</span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEdit(item)}
-                    className="flex items-center gap-1 text-[9px] font-black uppercase px-2 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors cursor-pointer"
-                    title="Edit Topping & Saus"
-                  >
-                    <Pencil className="w-3 h-3" />
-                    <span>Edit</span>
-                  </button>
-
-                  <button 
-                    type="button" 
-                    onClick={() => removeFromCart(item.cartId)} 
-                    className="w-7 h-7 rounded-lg bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-1">
-                <span className="inline-flex text-[8px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
-                  ✨ {item.customs.toppings.join(', ')}
-                </span>
-                <span className="inline-flex text-[8px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
-                  🥬 {item.customs.veg}
-                </span>
-                {item.customs.sauce[0] !== 'Tanpa Saus' && (
-                  <span className="inline-flex text-[8px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded">
-                    🔥 {formatSaus(item.customs.sauce, item.customs.spicyLevel)}
-                  </span>
-                )}
-              </div>
-
-              {item.customs.note && (
-                <p className="text-[10px] text-slate-500 italic bg-slate-50 p-1.5 rounded border border-slate-100">
-                  "{item.customs.note}"
-                </p>
-              )}
-
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                <span className="text-[9px] font-black uppercase text-slate-400">Porsi:</span>
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
-                  <button type="button" onClick={() => updateQty(item.cartId, -1)} className="w-6 h-6 bg-white rounded flex items-center justify-center text-slate-600 shadow-xs cursor-pointer"><Minus className="w-3 h-3" /></button>
-                  <span className="text-xs font-black w-4 text-center">{item.qty}</span>
-                  <button type="button" onClick={() => updateQty(item.cartId, 1)} className="w-6 h-6 bg-red-600 text-white rounded flex items-center justify-center shadow-xs cursor-pointer"><Plus className="w-3 h-3" /></button>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="p-4 bg-white border-t border-slate-100 shrink-0 shadow-xs">
-        <div className="flex justify-between items-end mb-3">
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Tagihan:</span>
-          <span className="text-2xl font-black text-red-600 tracking-tight leading-none">Rp {totalAkhir.toLocaleString('id-ID')}</span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <button 
-            type="button" 
-            onClick={() => initPayment('cash')} 
-            className="flex items-center justify-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-2 border-emerald-200 text-xs font-black uppercase tracking-wider py-3 rounded-xl transition-all cursor-pointer"
-          >
-            <Banknote className="w-4 h-4" /> Bayar Tunai
-          </button>
-          <button 
-            type="button" 
-            onClick={() => initPayment('qris')} 
-            className="flex items-center justify-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white border-2 border-sky-500 shadow-xs text-xs font-black uppercase tracking-wider py-3 rounded-xl transition-all cursor-pointer"
-          >
-            <ScanLine className="w-4 h-4" /> Via QRIS
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  const cartProps = {
+    queueDisplay,
+    displayCustomer,
+    orderType,
+    cart,
+    setCart,
+    isMobileCartOpen,
+    setIsMobileCartOpen,
+    handleOpenEdit,
+    removeFromCart,
+    updateQty,
+    totalAkhir,
+    initPayment,
+    formatSaus,
+  };
 
   return (
     <div className="min-h-screen bg-[#faf9f6] text-slate-900 flex flex-col lg:flex-row relative" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -875,7 +908,7 @@ export default function POSPage() {
       {/* PANEL CART DESKTOP */}
       <div className="hidden lg:block fixed inset-y-0 right-0 w-[410px] p-4 z-40">
         <div className="w-full h-full rounded-[2rem] shadow-2xl border-2 border-slate-100 overflow-hidden">
-          <CartInnerContent isMobile={false} />
+          <CartInnerContent isMobile={false} {...cartProps} />
         </div>
       </div>
 
@@ -887,7 +920,7 @@ export default function POSPage() {
             onClick={() => setIsMobileCartOpen(false)} 
           />
           <div className="relative z-10 w-full h-[85vh] bg-white rounded-t-[2rem] shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom duration-300">
-            <CartInnerContent isMobile={true} />
+            <CartInnerContent isMobile={true} {...cartProps} />
           </div>
         </div>
       )}

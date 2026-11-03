@@ -3,10 +3,10 @@ import { prisma } from '@/lib/prisma';
 
 // Helper pembersih angka agar anti-NaN
 const sanitizeNumber = (val) => {
-  if (typeof val === 'number') return Math.round(val);
+  if (typeof val === 'number') return Math.max(0, Math.round(val));
   if (!val) return 0;
   const cleaned = String(val).replace(/\D/g, '');
-  return cleaned ? parseInt(cleaned, 10) : 0;
+  return cleaned ? Math.max(0, parseInt(cleaned, 10)) : 0;
 };
 
 // GET: Ambil daftar pesanan, single detail, atau nomor antrean berikutnya
@@ -120,7 +120,8 @@ export async function POST(request) {
     };
 
     if (id) {
-      orderData.id = id;
+      const existing = await prisma.order.findUnique({ where: { id } });
+      orderData.id = existing ? `${id}-${Date.now().toString().slice(-4)}` : id;
     }
 
     const order = await prisma.order.create({
@@ -177,6 +178,14 @@ export async function DELETE(request) {
 
     // Reset Total (Bersihkan semua order & item)
     if (resetAll === 'true') {
+      const authHeader = request.headers.get('x-admin-auth');
+      const confirmParam = searchParams.get('confirm');
+      if (authHeader !== 'true' && confirmParam !== 'siboy-reset') {
+        return NextResponse.json(
+          { success: false, message: 'Akses ditolak: Otorisasi admin diperlukan untuk reset pesanan' },
+          { status: 403 }
+        );
+      }
       await prisma.orderItem.deleteMany({});
       await prisma.order.deleteMany({});
       return NextResponse.json({ 

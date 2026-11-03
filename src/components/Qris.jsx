@@ -43,7 +43,7 @@ export default function Qris({ isOpen, onClose, totalPrice, onConfirmPayment }) 
 
           <div className="bg-white border-2 border-slate-100 rounded-xl p-2.5 mb-3 shadow-sm inline-block">
             <img 
-              src="/qrasli.jpg" 
+              src="/qrtakoyakisiboyfix.jpeg" 
               alt="QRIS Takoyaki Siboy" 
               className="w-40 h-40 object-contain rounded-lg mix-blend-multiply"
             />
